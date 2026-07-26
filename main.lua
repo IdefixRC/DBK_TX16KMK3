@@ -1017,6 +1017,12 @@ function draw_digital_display(x, y, value, num_digits, decimal_places, digit_siz
     end
 end
 local function refresh(widget, event, touchState)
+    -- On touch radios EdgeTX may promote a tapped widget to full-screen mode.
+    -- Leave that mode immediately so the top bar and SYS/MDL keys stay active.
+    if touchState and lcd.exitFullScreen then
+        lcd.exitFullScreen()
+    end
+
     reload_runtime_config(widget)
     local date_time = getDateTime()
     local screen_width =  LCD_W or widget.zone.w
