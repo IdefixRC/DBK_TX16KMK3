@@ -103,8 +103,10 @@ local last_gov_audio_state = nil
 local last_profile_audio_state = nil
 local last_config_reload_time = -1
 local CONFIG_RELOAD_INTERVAL = 60
+local REFRESH_INTERVAL_TICKS = 10 -- getTime() uses 10 ms ticks: 10 FPS
 local disable_flags_cache = { value = nil, text = "OK" }
 local status_lines_cache = { text = nil, lines = {} }
+local gauge_geometry_cache = nil
 
 -- Deferred main-log write state
 local write_state = 0
@@ -311,7 +313,8 @@ local function create(zone, options)
 
     local widget = {
         zone = zone,
-        options = options
+        options = options,
+        last_refresh_tick = -REFRESH_INTERVAL_TICKS
     }
     for i = 1, TELE_ITEMS do
         value_min_max[i] = { 0, 0, 0 }
@@ -672,52 +675,56 @@ function draw_gauge_meter(xs, ys, value, max_value, size, color, bg_color)
     local end_angle = 270
     local range_angle = end_angle - start_angle
     value = math.max(0, math.min(max_value, value))
-    local scale_start = 190
-    local scale_end = 260
-    local scale_range = scale_end - scale_start
-    for i = 1, #GAUGE_SCALE_STEPS do
-        local step = GAUGE_SCALE_STEPS[i]
-        local angle = scale_start + (step / 100) * scale_range
-        local rad = math.rad(angle)
-        local x1 = xs + math.cos(rad) * (radius * 0.80)
-        local y1 = ys + math.sin(rad) * (radius * 0.80)
-        local x2 = xs + math.cos(rad) * (radius * 0.92)
-        local y2 = ys + math.sin(rad) * (radius * 0.92)
-        lcd.drawLine(x1, y1, x2, y2, SOLID, color)
-        if step % 20 == 0 then
-            local text_x = xs + math.cos(rad) * (radius * 1.25)
-            local text_y = ys + math.sin(rad) * (radius * 1.25)
-            lcd.drawText(text_x, text_y, tostring(step), SMLSIZE + color)
+    if not gauge_geometry_cache or gauge_geometry_cache.x ~= xs
+        or gauge_geometry_cache.y ~= ys or gauge_geometry_cache.radius ~= radius then
+        local geometry = { x = xs, y = ys, radius = radius, scale = {}, ticks = {}, arcs = {} }
+        for i = 1, #GAUGE_SCALE_STEPS do
+            local step = GAUGE_SCALE_STEPS[i]
+            local rad = math.rad(190 + (step / 100) * 70)
+            geometry.scale[i] = {
+                xs + math.cos(rad) * (radius * 0.80), ys + math.sin(rad) * (radius * 0.80),
+                xs + math.cos(rad) * (radius * 0.92), ys + math.sin(rad) * (radius * 0.92),
+                xs + math.cos(rad) * (radius * 1.25), ys + math.sin(rad) * (radius * 1.25),
+                tostring(step)
+            }
         end
+        for tick = 0, 100, 4 do
+            local rad = math.rad(start_angle + (tick / 100) * range_angle)
+            geometry.ticks[#geometry.ticks + 1] = {
+                xs + math.cos(rad) * (radius * 0.86), ys + math.sin(rad) * (radius * 0.86),
+                xs + math.cos(rad) * (radius * 0.92), ys + math.sin(rad) * (radius * 0.92)
+            }
+        end
+        -- Fewer, wider angular segments retain the six-pixel arc thickness
+        -- while cutting arc calls from 270 to 144 per refresh.
+        for seg = 0, 23 do
+            local percent = seg / 24
+            geometry.arcs[#geometry.arcs + 1] = {
+                270 + 90 * percent, 270 + 90 * ((seg + 1) / 24),
+                math.floor(percent * 255), math.floor(255 - percent * 255)
+            }
+        end
+        gauge_geometry_cache = geometry
     end
-    for tick = 0, 100, 4 do
-        local angle = start_angle + (tick / 100) * range_angle
-        local rad = math.rad(angle)
-        local x1 = xs + math.cos(rad) * (radius * 0.86)
-        local y1 = ys + math.sin(rad) * (radius * 0.86)
-        local x2 = xs + math.cos(rad) * (radius * 0.92)
-        local y2 = ys + math.sin(rad) * (radius * 0.92)
-        lcd.drawLine(x1, y1, x2, y2, SOLID, bg_color)
+
+    for i = 1, #gauge_geometry_cache.scale do
+        local mark = gauge_geometry_cache.scale[i]
+        lcd.drawLine(mark[1], mark[2], mark[3], mark[4], SOLID, color)
+        lcd.drawText(mark[5], mark[6], mark[7], SMLSIZE + color)
+    end
+    for i = 1, #gauge_geometry_cache.ticks do
+        local tick = gauge_geometry_cache.ticks[i]
+        lcd.drawLine(tick[1], tick[2], tick[3], tick[4], SOLID, bg_color)
     end
     local value_percent = value / max_value * 100
-    local segments = 45
-    local arc_start_angle = 270
-    local arc_end_angle = 360
-    for seg = 0, segments - 1 do
-        local seg_start = arc_start_angle + (arc_end_angle - arc_start_angle) * (seg / segments)
-        local seg_end = arc_start_angle + (arc_end_angle - arc_start_angle) * ((seg + 1) / segments)
-        local seg_percent = (seg / segments) * 100
-        local r = math.floor(seg_percent * 2.55)
-        local g = math.floor(255 - (seg_percent * 2.55))
-        local b = 0
-        local seg_color = lcd.RGB(r, g, b)
+    for i = 1, #gauge_geometry_cache.arcs do
+        local arc = gauge_geometry_cache.arcs[i]
+        local seg_color = lcd.RGB(arc[3], arc[4], 0)
         for w = 0, 5 do
-            lcd.drawArc(xs, ys, radius * 0.92 + w, seg_start, seg_end, seg_color)
+            lcd.drawArc(xs, ys, radius * 0.92 + w, arc[1], arc[2], seg_color)
         end
     end
     local value_angle = start_angle + (value_percent / 100) * range_angle
-    local arc_start = start_angle
-    local arc_end = value_angle
     local pointer_angle = value_angle
     local pointer_rad = math.rad(pointer_angle)
     local offset_angle = 232
@@ -1022,6 +1029,13 @@ local function refresh(widget, event, touchState)
     if touchState and lcd.exitFullScreen then
         lcd.exitFullScreen()
     end
+
+    local refresh_tick = getTime()
+    local elapsed_ticks = refresh_tick - (widget.last_refresh_tick or -REFRESH_INTERVAL_TICKS)
+    if not touchState and elapsed_ticks >= 0 and elapsed_ticks < REFRESH_INTERVAL_TICKS then
+        return
+    end
+    widget.last_refresh_tick = refresh_tick
 
     reload_runtime_config(widget)
     local date_time = getDateTime()
