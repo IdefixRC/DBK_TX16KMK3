@@ -62,7 +62,7 @@ O foco deste projeto é entregar uma tela principal limpa, legível e otimizada 
 
 Você pode baixar a versão mais recente em `.zip` por este link:
 
-[Baixar DBK_TX16KMK3 v1.0.3 (.zip)](https://github.com/vhuzalo/DBK_TX16KMK3/archive/refs/tags/v1.0.3.zip)
+[Baixar DBK_TX16KMK3 v1.0.4 (.zip)](https://github.com/vhuzalo/DBK_TX16KMK3/archive/refs/tags/v1.0.4.zip)
 
 Depois de baixar:
 
@@ -218,6 +218,15 @@ battery_alert_interval = 10
 
 Na inicialização, se `/WIDGETS/DBK_TX16KMK3_config.json` não existir ou estiver vazio, o próprio widget tenta criar esse arquivo automaticamente com os valores padrão.
 
+## Novidades da v1.0.4
+
+- reduzido o uso de memória e a criação de tabelas temporárias durante o desenho
+- removida a coleta de curvas que estava marcada como desativada
+- recarga do JSON reduzida para uma vez por minuto e debug limitado à inicialização
+- renderização limitada a 10 FPS e geometria dos medidores reutilizada entre frames
+- corrigido o comportamento de tela cheia acionado pelo toque no EdgeTX
+- adicionado `deploy.sh` seguro, com detecção automática e modo `--dry-run`
+
 ## Novidades da v1.0.3
 
 - corrigido o alerta de bateria baixa para respeitar o valor persistido em `BatAlertPct` nas opções do widget
@@ -313,4 +322,4 @@ Quando a bateria atinge o percentual configurado:
 
 ## Versão
 
-Versão atual do widget: **v1.0.3**
+Versão atual do widget: **v1.0.4**
