@@ -127,19 +127,19 @@ local function ensure_widget_config_file()
     io.close(config_file)
 end
 
-local function load_widget_config()
+local function load_widget_config(write_debug)
     ensure_widget_config_file()
     local file_info = fstat(CONFIG_FILE)
     if not file_info or file_info.size <= 0 then
         local default_config = get_default_widget_config()
-        write_config_debug_log("missing_or_empty", "", default_config)
+        if write_debug then write_config_debug_log("missing_or_empty", "", default_config) end
         return default_config
     end
 
     local config_file = io.open(CONFIG_FILE, "r")
     if not config_file then
         local default_config = get_default_widget_config()
-        write_config_debug_log("open_failed", "", default_config)
+        if write_debug then write_config_debug_log("open_failed", "", default_config) end
         return default_config
     end
 
@@ -168,7 +168,7 @@ local function load_widget_config()
         battery_alert_interval = math.floor(battery_alert_interval)
     }
 
-    write_config_debug_log("parsed", content, parsed_config)
+    if write_debug then write_config_debug_log("parsed", content, parsed_config) end
     return parsed_config
 end
 

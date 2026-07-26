@@ -97,6 +97,27 @@ Depois no rádio:
 3. Selecione o widget `DBK_TX16KMK3`.
 4. Ajuste as opções conforme necessário.
 
+### Deploy pelo computador
+
+Em Linux, `deploy.sh` detecta automaticamente um cartão SD ou rádio EdgeTX
+montado em `/run/media`, `/media` ou `/mnt`:
+
+```bash
+./deploy.sh --dry-run
+./deploy.sh
+```
+
+Também é possível informar explicitamente a raiz que contém `WIDGETS/` e
+`IMAGES/`:
+
+```bash
+./deploy.sh /run/media/$USER/EDGETX
+```
+
+O script compara os arquivos e copia somente os ausentes ou alterados. Os logs
+de voo e `/WIDGETS/DBK_TX16KMK3_config.json` existentes no rádio são sempre
+preservados.
+
 ## Imagens dos modelos
 
 As imagens dos modelos agora são carregadas da pasta:

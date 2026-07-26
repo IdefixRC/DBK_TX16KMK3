@@ -36,6 +36,30 @@ local value_min_max = {}
 local field_id = {}
 local bank_info = { current = 1, name = "Bank 1" }
 
+-- Immutable drawing lookup tables. Keeping these outside refresh-time functions
+-- avoids rebuilding short-lived Lua tables on every frame.
+local LED_TRAIL_COLORS = {
+    { 255, 0, 0 }, { 224, 0, 0 }, { 176, 0, 0 },
+    { 128, 0, 0 }, { 80, 0, 0 }, { 48, 0, 0 }
+}
+local GAUGE_SCALE_STEPS = { 0, 20, 40, 60, 80, 100 }
+local GOVERNOR_STATE_NAMES = {
+    [0] = "OFF", [1] = "IDLE", [2] = "SPOOLUP", [3] = "RECOVERY",
+    [4] = "ACTIVE", [5] = "THR-OFF", [6] = "LOST-HS", [7] = "AUTOROT",
+    [8] = "BAILOUT", [100] = "DISABLED", [101] = "DISARMED"
+}
+local PROFILE_AUDIO_FILES = {
+    [1] = "profile/1.wav", [2] = "profile/2.wav", [3] = "profile/3.wav",
+    [4] = "profile/4.wav", [5] = "profile/5.wav", [6] = "profile/6.wav"
+}
+local DIGIT_SEGMENTS = {
+    [0] = {1,1,1,1,1,1,0}, [1] = {0,1,1,0,0,0,0},
+    [2] = {1,1,0,1,1,0,1}, [3] = {1,1,1,1,0,0,1},
+    [4] = {0,1,1,0,0,1,1}, [5] = {1,0,1,1,0,1,1},
+    [6] = {1,0,1,1,1,1,1}, [7] = {1,1,1,0,0,0,0},
+    [8] = {1,1,1,1,1,1,1}, [9] = {1,1,1,1,0,1,1}
+}
+
 -- Bitmap assets
 local tg_pic_obj
 local bg_pic_obj
@@ -78,18 +102,11 @@ local last_arm_audio_state = nil
 local last_gov_audio_state = nil
 local last_profile_audio_state = nil
 local last_config_reload_time = -1
+local CONFIG_RELOAD_INTERVAL = 60
+local disable_flags_cache = { value = nil, text = "OK" }
+local status_lines_cache = { text = nil, lines = {} }
 
--- Curve sampling buffers
-local rpm_buffer = {}
-local rpm_collect_timer = 0
-local rpm_collect_interval = 2
-local rpm_start_time = ""
-local current_buffer = {}
-local current_start_time = ""
-local voltage_buffer = {}
-local voltage_start_time = ""
-
--- Multi-frame log write state machine
+-- Deferred main-log write state
 local write_state = 0
 local write_snapshot = nil
 
@@ -173,14 +190,6 @@ end
 
 local function set_led_strip_circulating_red(phase)
     local half_length = math.max(1, math.floor(LED_STRIP_LENGTH / 2))
-    local bar_colors = {
-        { 255, 0, 0 },
-        { 224, 0, 0 },
-        { 176, 0, 0 },
-        { 128, 0, 0 },
-        { 80, 0, 0 },
-        { 48, 0, 0 }
-    }
     local travel_length = math.max(1, half_length - 1)
     local cycle_length = math.max(1, (travel_length * 2))
     local scanner_position = phase % cycle_length
@@ -196,10 +205,10 @@ local function set_led_strip_circulating_red(phase)
     for strip_index = 0, 1 do
         local strip_offset = strip_index * half_length
 
-        for trail_index = 1, #bar_colors do
+        for trail_index = 1, #LED_TRAIL_COLORS do
             local led_index = strip_offset + scanner_position + trail_index - 1
             if led_index < strip_offset + half_length and led_index < LED_STRIP_LENGTH then
-                local color = bar_colors[trail_index]
+                local color = LED_TRAIL_COLORS[trail_index]
                 setRGBLedColor(led_index, color[1], color[2], color[3])
             end
         end
@@ -294,7 +303,8 @@ local function update_model_index(model_name)
 end
 
 local function create(zone, options)
-    local config = widget_config.load()
+    local config = widget_config.load(true)
+    last_config_reload_time = getRtcTime() or 0
     if not options.BatAlertPct or options.BatAlertPct == "" then
         options.BatAlertPct = config.battery_alert_pct
     end
@@ -400,13 +410,14 @@ end
 
 local function reload_runtime_config(widget)
     local now = getRtcTime() or 0
-    if last_config_reload_time == now then
+    if last_config_reload_time >= 0 and now >= last_config_reload_time
+        and (now - last_config_reload_time) < CONFIG_RELOAD_INTERVAL then
         return
     end
 
     last_config_reload_time = now
 
-    local config = widget_config.load()
+    local config = widget_config.load(false)
     runtime_cache.pilot_name = config.pilot_name or DEFAULT_PILOT_NAME
     runtime_cache.battery_alert_pct = config.battery_alert_pct or DEFAULT_BATTERY_ALERT_PCT
     runtime_cache.battery_alert_interval = config.battery_alert_interval or DEFAULT_BATTERY_ALERT_INTERVAL
@@ -450,16 +461,7 @@ local function get_governor_audio_file(gov_text)
 end
 
 local function get_profile_number_audio_file(profile_value)
-    local profile_map = {
-        [1] = "profile/1.wav",
-        [2] = "profile/2.wav",
-        [3] = "profile/3.wav",
-        [4] = "profile/4.wav",
-        [5] = "profile/5.wav",
-        [6] = "profile/6.wav"
-    }
-
-    return profile_map[profile_value]
+    return PROFILE_AUDIO_FILES[profile_value]
 end
 
 local function play_triple_haptic()
@@ -623,65 +625,6 @@ local function increment_total_flight_count(model_name)
         io.close(file)
     end
 end
--- Curve recording feature is disabled - write_rpm_data
-
-local function write_rpm_data(model_name, flight_num, start_time, end_time, rpm_data)
-    if not model_name or model_name == "" or #rpm_data == 0 then
-        return
-    end
-    local safe_name = sanitize_model_name(model_name)
-    local date_time = getDateTime()
-    local file_name = "[".. safe_name .."]" .. build_date_stamp(date_time) .. "_rpm.txt"
-    local file_path = LOG_ROOT .. "/" .. file_name
-    local file_obj = io.open(file_path, "a")
-    if file_obj then
-        io.write(file_obj, string.format("#%02d|%s|%s\n", flight_num, start_time, end_time))
-        local parts = {}
-        for i = 1, #rpm_data do parts[i] = tostring(rpm_data[i]) end
-        io.write(file_obj, table.concat(parts, ",") .. "\n")
-        io.close(file_obj)
-    end
-end
-
--- Curve recording feature is disabled - write_current_data
-
-local function write_current_data(model_name, flight_num, start_time, end_time, current_data)
-    if not model_name or model_name == "" or #current_data == 0 then
-        return
-    end
-    local safe_name = sanitize_model_name(model_name)
-    local date_time = getDateTime()
-    local file_name = "[".. safe_name .."]" .. build_date_stamp(date_time) .. "_electricity.txt"
-    local file_path = LOG_ROOT .. "/" .. file_name
-    local file_obj = io.open(file_path, "a")
-    if file_obj then
-        io.write(file_obj, string.format("#%02d|%s|%s\n", flight_num, start_time, end_time))
-        local parts = {}
-        for i = 1, #current_data do parts[i] = string.format("%.1f", current_data[i]) end
-        io.write(file_obj, table.concat(parts, ",") .. "\n")
-        io.close(file_obj)
-    end
-end
-
--- Curve recording feature is disabled - write_voltage_data
-
-local function write_voltage_data(model_name, flight_num, start_time, end_time, voltage_data)
-    if not model_name or model_name == "" or #voltage_data == 0 then
-        return
-    end
-    local safe_name = sanitize_model_name(model_name)
-    local date_time = getDateTime()
-    local file_name = "[".. safe_name .."]" .. build_date_stamp(date_time) .. "_volt.txt"
-    local file_path = LOG_ROOT .. "/" .. file_name
-    local file_obj = io.open(file_path, "a")
-    if file_obj then
-        io.write(file_obj, string.format("#%02d|%s|%s\n", flight_num, start_time, end_time))
-        local parts = {}
-        for i = 1, #voltage_data do parts[i] = string.format("%.2f", voltage_data[i]) end
-        io.write(file_obj, table.concat(parts, ",") .. "\n")
-        io.close(file_obj)
-    end
-end
 local function draw_rounded_rectangle(xs, ys, w, h, r, color)
     lcd.drawArc(xs + r, ys + r, r, 270, 360, color)
     lcd.drawArc(xs + r, ys + h - r, r, 180, 270, color)
@@ -729,12 +672,11 @@ function draw_gauge_meter(xs, ys, value, max_value, size, color, bg_color)
     local end_angle = 270
     local range_angle = end_angle - start_angle
     value = math.max(0, math.min(max_value, value))
-    local scale_steps = {0, 20, 40, 60, 80, 100}
     local scale_start = 190
     local scale_end = 260
     local scale_range = scale_end - scale_start
-    for i = 1, #scale_steps do
-        local step = scale_steps[i]
+    for i = 1, #GAUGE_SCALE_STEPS do
+        local step = GAUGE_SCALE_STEPS[i]
         local angle = scale_start + (step / 100) * scale_range
         local rad = math.rad(angle)
         local x1 = xs + math.cos(rad) * (radius * 0.80)
@@ -794,19 +736,7 @@ function draw_gauge_meter(xs, ys, value, max_value, size, color, bg_color)
     lcd.drawFilledCircle(center_x, center_y, math.max(3, radius * 0.08), color)
 end
 local function draw_digit_segment(x, y, digit, seg_width, seg_height, seg_thickness, color, bg_color)
-    local segments = {
-        [0] = {1,1,1,1,1,1,0},
-        [1] = {0,1,1,0,0,0,0},
-        [2] = {1,1,0,1,1,0,1},
-        [3] = {1,1,1,1,0,0,1},
-        [4] = {0,1,1,0,0,1,1},
-        [5] = {1,0,1,1,0,1,1},
-        [6] = {1,0,1,1,1,1,1},
-        [7] = {1,1,1,0,0,0,0},
-        [8] = {1,1,1,1,1,1,1},
-        [9] = {1,1,1,1,0,1,1}
-    }
-    local segs = segments[digit] or segments[0]
+    local segs = DIGIT_SEGMENTS[digit] or DIGIT_SEGMENTS[0]
     if segs[1] == 1 then
         lcd.drawFilledRectangle(x + seg_thickness, y, seg_width, seg_thickness, color)
     end
@@ -862,8 +792,12 @@ local function arming_disable_flags_to_string(flags)
         return "OK"
     end
 
-    local names = {}
     flags = math.floor(flags)
+    if disable_flags_cache.value == flags then
+        return disable_flags_cache.text
+    end
+
+    local names = {}
     for i = 0, 25 do
         local mask = 2 ^ i
         if math.floor(flags / mask) % 2 == 1 then
@@ -875,10 +809,14 @@ local function arming_disable_flags_to_string(flags)
     end
 
     if #names == 0 then
-        return "OK"
+        disable_flags_cache.value = flags
+        disable_flags_cache.text = "OK"
+        return disable_flags_cache.text
     end
 
-    return table.concat(names, ", ")
+    disable_flags_cache.value = flags
+    disable_flags_cache.text = table.concat(names, ", ")
+    return disable_flags_cache.text
 end
 
 local function wrap_disable_flags_text(text, max_chars_per_line, max_lines)
@@ -922,9 +860,15 @@ local function wrap_disable_flags_text(text, max_chars_per_line, max_lines)
 end
 
 function draw_status_block(x, y, text, color)
-    local lines = wrap_disable_flags_text(text, 16, 2)
+    local lines = status_lines_cache.lines
+    if status_lines_cache.text ~= text then
+        lines = wrap_disable_flags_text(text, 16, 2)
+        status_lines_cache.text = text
+        status_lines_cache.lines = lines
+    end
     if #lines == 0 then
-        lines = { "..." }
+        lcd.drawText(x, y, "...", SMLSIZE + color)
+        return
     end
 
     for i = 1, #lines do
@@ -933,22 +877,8 @@ function draw_status_block(x, y, text, color)
 end
 
 function get_governor_state_text(gov_value, has_gov_sensor, throttle_value)
-    local gov_state_names = {
-        [0] = "OFF",
-        [1] = "IDLE",
-        [2] = "SPOOLUP",
-        [3] = "RECOVERY",
-        [4] = "ACTIVE",
-        [5] = "THR-OFF",
-        [6] = "LOST-HS",
-        [7] = "AUTOROT",
-        [8] = "BAILOUT",
-        [100] = "DISABLED",
-        [101] = "DISARMED"
-    }
-
     if has_gov_sensor and gov_value ~= nil then
-        return gov_state_names[gov_value] or "UNKNOWN"
+        return GOVERNOR_STATE_NAMES[gov_value] or "UNKNOWN"
     end
 
     if throttle_value == nil then
@@ -1309,19 +1239,6 @@ local function refresh(widget, event, touchState)
             power_max[1] = 0
             power_max[2] = 0
             write_en_flag = false
-            -- Curve recording feature is disabled - initialize data buffers
-            
-            rpm_buffer = {}
-            rpm_collect_timer = 0
-            rpm_start_time = string.format("%02d:%02d:%02d",
-                date_time.hour,
-                date_time.min,
-                date_time.sec)
-            current_buffer = {}
-            current_start_time = rpm_start_time
-            voltage_buffer = {}
-            voltage_start_time = rpm_start_time
-            
         end
     else
         if arm_flag then
@@ -1339,19 +1256,6 @@ local function refresh(widget, event, touchState)
         if arm_flag then
             second[1] = second[1] + 1
             total_second = total_second + 1
-            -- Curve recording feature is disabled - data collection
-            
-            rpm_collect_timer = rpm_collect_timer + 1
-            if rpm_collect_timer >= rpm_collect_interval then
-                rpm_collect_timer = 0
-                local current_rpm = (field_id[3][2] and value_min_max[3][1]) or 0
-                if #rpm_buffer < 300 then table.insert(rpm_buffer, current_rpm) end
-                local current_value = (field_id[2][2] and value_min_max[2][1]) or 0
-                if #current_buffer < 300 then table.insert(current_buffer, current_value) end
-                local voltage_value = (field_id[1][2] and value_min_max[1][1]) or 0
-                if #voltage_buffer < 300 then table.insert(voltage_buffer, voltage_value) end
-            end
-            
         end
     end
     minutes[1] = string.format("%02d", math.floor(second[1] % 3600 / 60))
@@ -1362,8 +1266,6 @@ local function refresh(widget, event, touchState)
     if write_en_flag and fly_number < 57 and second[1] > 30 then
         -- Current frame: prepare data only, do not perform any file I/O
         fly_number = fly_number + 1
-        local end_time_str = string.format("%02d:%02d:%02d",
-            date_time.hour, date_time.min, date_time.sec)
         log_info =
             string.format("%d", date_time.year) .. '/' ..
             string.format("%02d", date_time.mon) .. '/' ..
@@ -1396,21 +1298,15 @@ local function refresh(widget, event, touchState)
             string.format("%03d", value_min_max[11][2]) .. '|' ..
             string.format("%04.1f", value_min_max[12][2]) .. '|' ..
             string.format("%04.1f", value_min_max[12][3]) .. "\n"
-        -- Snapshot: store all data needed for writing and release buffer references (new empty tables for the next flight)
+        -- Keep only the references needed by the deferred main-log write.
         write_snapshot = {
             file_path  = file_path,
             log_info   = log_info,
             log_data   = log_data,
-            fly_number = fly_number,
-            model_name = runtime_cache.model_name,
-            end_time   = end_time_str,
-            rpm_buf    = rpm_buffer,   rpm_start = rpm_start_time,
-            cur_buf    = current_buffer, cur_start = current_start_time,
-            volt_buf   = voltage_buffer, volt_start = voltage_start_time,
+            fly_number = fly_number
         }
         write_state = 1
         write_en_flag = false
-        rpm_buffer = {};  current_buffer = {};  voltage_buffer = {}
         -- Finalization work without heavy I/O runs in the trigger frame
         update_model_index(runtime_cache.model_name)
         session_flight_count = 0
@@ -1420,7 +1316,7 @@ local function refresh(widget, event, touchState)
             runtime_cache.daily_flight_count = fly_number
         end
     end
-    -- Multi-frame write state machine: complete only one file write per frame to avoid exceeding the CPU budget in a single frame
+    -- Deferred write keeps file I/O outside the flight-finalization block.
     if write_state == 1 and write_snapshot then
         -- Frame 1: write the main log file (use table.concat to write historical entries in one shot)
         local f = io.open(write_snapshot.file_path, "w")
@@ -1431,27 +1327,6 @@ local function refresh(widget, event, touchState)
             end
             io.write(f, write_snapshot.log_data[write_snapshot.fly_number])
             io.close(f)
-        end
-        write_state = 2
-    elseif write_state == 2 and write_snapshot then
-        -- Frame 2: write the RPM curve file
-        if #write_snapshot.rpm_buf > 0 then
-            write_rpm_data(write_snapshot.model_name, write_snapshot.fly_number,
-                write_snapshot.rpm_start, write_snapshot.end_time, write_snapshot.rpm_buf)
-        end
-        write_state = 3
-    elseif write_state == 3 and write_snapshot then
-        -- Frame 3: write the current curve file
-        if #write_snapshot.cur_buf > 0 then
-            write_current_data(write_snapshot.model_name, write_snapshot.fly_number,
-                write_snapshot.cur_start, write_snapshot.end_time, write_snapshot.cur_buf)
-        end
-        write_state = 4
-    elseif write_state == 4 and write_snapshot then
-        -- Frame 4: write the voltage curve file, then release the snapshot
-        if #write_snapshot.volt_buf > 0 then
-            write_voltage_data(write_snapshot.model_name, write_snapshot.fly_number,
-                write_snapshot.volt_start, write_snapshot.end_time, write_snapshot.volt_buf)
         end
         write_snapshot = nil
         write_state = 0
