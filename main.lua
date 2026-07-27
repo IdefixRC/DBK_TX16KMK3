@@ -102,7 +102,7 @@ local arm_flag = false
 local last_arm_status = 0
 local session_flight_count = 0
 local current_flight_max_current = 0
-local led_cache = { mode = "", phase = -1 }
+local led_cache = { mode = "", phase = -1, color_index = -1, trails = {} }
 local low_battery_alert_active = false
 local low_battery_alert_time = 0
 local last_arm_audio_state = nil
@@ -114,6 +114,9 @@ local REFRESH_INTERVAL_TICKS = 10 -- getTime() uses 10 ms ticks: 10 FPS
 local disable_flags_cache = { value = nil, text = "OK" }
 local status_lines_cache = { text = nil, lines = {} }
 local gauge_geometry_cache = nil
+local ring_geometry_cache = {}
+local power_gauge_geometry_cache = nil
+local digital_geometry_cache = {}
 
 -- Deferred main-log write state
 local write_state = 0
@@ -247,11 +250,23 @@ local function scale_led_color(color, factor, minimum)
     return scaled_color
 end
 
-local function led_color_key(mode, color)
-    return mode .. ":" .. color[1] .. "," .. color[2] .. "," .. color[3]
+local function get_led_trail(color_index, base_color)
+    local cached = led_cache.trails[color_index]
+    if cached then
+        return cached
+    end
+
+    cached = { colors = {} }
+    local intensities = { 1, 0.88, 0.69, 0.50, 0.31, 0.19 }
+    for i = 1, #intensities do
+        cached.colors[i] = scale_led_color(base_color, intensities[i])
+    end
+    cached.background = scale_led_color(base_color, 0.03, 1)
+    led_cache.trails[color_index] = cached
+    return cached
 end
 
-local function set_led_strip_circulating(phase, base_color)
+local function set_led_strip_circulating(phase, base_color, color_index)
     local half_length = math.max(1, math.floor(LED_STRIP_LENGTH / 2))
     local travel_length = math.max(1, half_length - 1)
     local cycle_length = math.max(1, (travel_length * 2))
@@ -261,12 +276,9 @@ local function set_led_strip_circulating(phase, base_color)
         scanner_position = cycle_length - scanner_position
     end
 
-    local trail_colors = {}
-    local intensities = { 1, 0.88, 0.69, 0.50, 0.31, 0.19 }
-    for i = 1, #intensities do
-        trail_colors[i] = scale_led_color(base_color, intensities[i])
-    end
-    local background = scale_led_color(base_color, 0.03, 1)
+    local trail = get_led_trail(color_index, base_color)
+    local trail_colors = trail.colors
+    local background = trail.background
 
     for i = 0, LED_STRIP_LENGTH - 1 do
         setRGBLedColor(i, background[1], background[2], background[3])
@@ -293,13 +305,18 @@ function update_led_strip(widget, is_armed, has_disable_flags)
         return
     end
 
-    local armed_color = LED_COLORS[math.floor(tonumber(widget.options.ArmLED) or 3)] or LED_COLORS[3]
-    local disarmed_color = LED_COLORS[math.floor(tonumber(widget.options.DisarmLED) or 1)] or LED_COLORS[1]
+    local armed_color_index = math.floor(tonumber(widget.options.ArmLED) or 3)
+    local disarmed_color_index = math.floor(tonumber(widget.options.DisarmLED) or 1)
+    if not LED_COLORS[armed_color_index] then armed_color_index = 3 end
+    if not LED_COLORS[disarmed_color_index] then disarmed_color_index = 1 end
+    local armed_color = LED_COLORS[armed_color_index]
+    local disarmed_color = LED_COLORS[disarmed_color_index]
 
     if widget.options.DispLED ~= 1 then
         if led_cache.mode ~= "OFF" then
             led_cache.mode = "OFF"
             led_cache.phase = -1
+            led_cache.color_index = -1
             set_led_strip_off()
         end
         return
@@ -307,24 +324,25 @@ function update_led_strip(widget, is_armed, has_disable_flags)
 
     if has_disable_flags then
         local phase = math.floor(getTime() / 2)
-        local mode = led_color_key("DISABLE", disarmed_color)
-        if led_cache.mode ~= mode or led_cache.phase ~= phase then
-            led_cache.mode = mode
+        if led_cache.mode ~= "DISABLE" or led_cache.phase ~= phase
+            or led_cache.color_index ~= disarmed_color_index then
+            led_cache.mode = "DISABLE"
             led_cache.phase = phase
-            set_led_strip_circulating(phase, disarmed_color)
+            led_cache.color_index = disarmed_color_index
+            set_led_strip_circulating(phase, disarmed_color, disarmed_color_index)
         end
     elseif is_armed then
-        local mode = led_color_key("ARMED", armed_color)
-        if led_cache.mode ~= mode then
-            led_cache.mode = mode
+        if led_cache.mode ~= "ARMED" or led_cache.color_index ~= armed_color_index then
+            led_cache.mode = "ARMED"
             led_cache.phase = -1
+            led_cache.color_index = armed_color_index
             set_led_strip_solid(armed_color[1], armed_color[2], armed_color[3])
         end
     else
-        local mode = led_color_key("DISARMED", disarmed_color)
-        if led_cache.mode ~= mode then
-            led_cache.mode = mode
+        if led_cache.mode ~= "DISARMED" or led_cache.color_index ~= disarmed_color_index then
+            led_cache.mode = "DISARMED"
             led_cache.phase = -1
+            led_cache.color_index = disarmed_color_index
             set_led_strip_solid(disarmed_color[1], disarmed_color[2], disarmed_color[3])
         end
     end
@@ -389,7 +407,8 @@ local function create(zone, options)
     local widget = {
         zone = zone,
         options = options,
-        last_refresh_tick = -REFRESH_INTERVAL_TICKS
+        last_refresh_tick = -REFRESH_INTERVAL_TICKS,
+        color_cache = {}
     }
     for i = 1, TELE_ITEMS do
         value_min_max[i] = { 0, 0, 0 }
@@ -408,6 +427,7 @@ local function create(zone, options)
     tg_pic_obj = nil
     led_cache.mode = ""
     led_cache.phase = -1
+    led_cache.color_index = -1
     telemetry_initialized = false
     for k, v in pairs(crsf_field) do
         local field_info = getFieldInfo(v)
@@ -514,6 +534,30 @@ local function update(widget, options)
 end
 local function background(widget)
 end
+
+local function get_widget_colors(widget)
+    local cache = widget.color_cache
+    if not cache then
+        cache = {}
+        widget.color_cache = cache
+    end
+    local square_option = widget.options.SquareColor
+    local value_option = widget.options.ValueColor
+    if cache.square_option ~= square_option or cache.value_option ~= value_option then
+        lcd.setColor(CUSTOM_COLOR, square_option)
+        cache.square_color = lcd.getColor(CUSTOM_COLOR)
+        lcd.setColor(CUSTOM_COLOR, value_option)
+        cache.value_color = lcd.getColor(CUSTOM_COLOR)
+        cache.square_option = square_option
+        cache.value_option = value_option
+    end
+    if cache.bg_color == nil then
+        lcd.setColor(CUSTOM_COLOR, BLACK)
+        cache.bg_color = lcd.getColor(CUSTOM_COLOR)
+    end
+    return cache.bg_color, cache.square_color, cache.value_color
+end
+
 local function get_battery_alert_threshold(widget)
     local threshold = tonumber(widget.options.BatAlertPct) or 0
     if threshold < 0 then
@@ -780,7 +824,7 @@ function draw_gauge_meter(xs, ys, value, max_value, size, color, bg_color)
             local percent = seg / 24
             geometry.arcs[#geometry.arcs + 1] = {
                 270 + 90 * percent, 270 + 90 * ((seg + 1) / 24),
-                math.floor(percent * 255), math.floor(255 - percent * 255)
+                lcd.RGB(math.floor(percent * 255), math.floor(255 - percent * 255), 0)
             }
         end
         gauge_geometry_cache = geometry
@@ -798,9 +842,8 @@ function draw_gauge_meter(xs, ys, value, max_value, size, color, bg_color)
     local value_percent = value / max_value * 100
     for i = 1, #gauge_geometry_cache.arcs do
         local arc = gauge_geometry_cache.arcs[i]
-        local seg_color = lcd.RGB(arc[3], arc[4], 0)
         for w = 0, 5 do
-            lcd.drawArc(xs, ys, radius * 0.92 + w, arc[1], arc[2], seg_color)
+            lcd.drawArc(xs, ys, radius * 0.92 + w, arc[1], arc[2], arc[3])
         end
     end
     local value_angle = start_angle + (value_percent / 100) * range_angle
@@ -821,7 +864,7 @@ function draw_gauge_meter(xs, ys, value, max_value, size, color, bg_color)
     lcd.drawLine(center_x, center_y - 1, pointer_x, pointer_y - 1, SOLID, color)
     lcd.drawFilledCircle(center_x, center_y, math.max(3, radius * 0.08), color)
 end
-local function draw_digit_segment(x, y, digit, seg_width, seg_height, seg_thickness, color, bg_color)
+local function draw_digit_segment(x, y, digit, seg_width, seg_height, seg_thickness, color)
     local segs = DIGIT_SEGMENTS[digit] or DIGIT_SEGMENTS[0]
     if segs[1] == 1 then
         lcd.drawFilledRectangle(x + seg_thickness, y, seg_width, seg_thickness, color)
@@ -850,16 +893,15 @@ function draw_time_display(x, y, hours, minutes, digit_size, color)
     local seg_height = digit_size * 0.5
     local seg_thickness = digit_size * 0.15
     local digit_spacing = digit_size * 1.2
-    local gray_color = lcd.RGB(80, 80, 80)
     local colon_size = seg_thickness * 1.5
     hours = math.max(0, math.min(23, hours))
     minutes = math.max(0, math.min(59, minutes))
     local current_x = x
     local hour_tens = math.floor(hours / 10)
-    draw_digit_segment(current_x, y, hour_tens, seg_width, seg_height, seg_thickness, color, gray_color)
+    draw_digit_segment(current_x, y, hour_tens, seg_width, seg_height, seg_thickness, color)
     current_x = current_x + digit_spacing
     local hour_ones = hours % 10
-    draw_digit_segment(current_x, y, hour_ones, seg_width, seg_height, seg_thickness, color, gray_color)
+    draw_digit_segment(current_x, y, hour_ones, seg_width, seg_height, seg_thickness, color)
     current_x = current_x + digit_spacing
     local colon_y1 = y + seg_height * 0.6
     local colon_y2 = y + seg_height * 1.4 + seg_thickness
@@ -867,10 +909,10 @@ function draw_time_display(x, y, hours, minutes, digit_size, color)
     lcd.drawFilledRectangle(current_x - digit_spacing * 0.05, colon_y2, colon_size, colon_size, color)
     current_x = current_x + digit_spacing * 0.3
     local min_tens = math.floor(minutes / 10)
-    draw_digit_segment(current_x, y, min_tens, seg_width, seg_height, seg_thickness, color, gray_color)
+    draw_digit_segment(current_x, y, min_tens, seg_width, seg_height, seg_thickness, color)
     current_x = current_x + digit_spacing
     local min_ones = minutes % 10
-    draw_digit_segment(current_x, y, min_ones, seg_width, seg_height, seg_thickness, color, gray_color)
+    draw_digit_segment(current_x, y, min_ones, seg_width, seg_height, seg_thickness, color)
 end
 
 local function arming_disable_flags_to_string(flags)
@@ -984,27 +1026,36 @@ end
 function draw_ring_progress(xs, ys, value, max_value, size)
     local radius = size
     local ring_width = 8
-    local segments = 20
-    local gap = 3
-    local angle_coverage = 270
     local segments_to_draw = 15
-    local start_angle = -135
-    local gray_color = lcd.RGB(80, 80, 80)
+    local geometry
+    for i = 1, #ring_geometry_cache do
+        local candidate = ring_geometry_cache[i]
+        if candidate.x == xs and candidate.y == ys and candidate.radius == radius then
+            geometry = candidate
+            break
+        end
+    end
+    if not geometry then
+        geometry = { x = xs, y = ys, radius = radius, segments = {}, gray = lcd.RGB(80, 80, 80) }
+        for i = 0, segments_to_draw - 1 do
+            local angle_start = 18 * i - 135 + 1.5
+            local angle_end = 18 * (i + 1) - 135 - 1.5
+            local seg_percent = (i / (segments_to_draw - 1)) * 100
+            geometry.segments[i + 1] = {
+                angle_start,
+                angle_end,
+                lcd.RGB(math.floor(seg_percent * 2.55), math.floor(255 - seg_percent * 2.55), 0)
+            }
+        end
+        ring_geometry_cache[#ring_geometry_cache + 1] = geometry
+    end
     value = math.max(0, math.min(max_value, value))
     local progress_percent = value / max_value
     local active_segments = math.floor(segments_to_draw * progress_percent)
-    for i = 0, segments_to_draw - 1 do
-        local angle_start = (360 / segments) * i + start_angle + gap / 2
-        local angle_end = (360 / segments) * (i + 1) + start_angle - gap / 2
-        local segment_color = gray_color
-        if i < active_segments then
-            local seg_percent = (i / (segments_to_draw - 1)) * 100
-            local r = math.floor(seg_percent * 2.55)
-            local g = math.floor(255 - (seg_percent * 2.55))
-            local b = 0
-            segment_color = lcd.RGB(r, g, b)
-        end
-        lcd.drawAnnulus(xs, ys, radius - ring_width, radius, angle_start, angle_end, segment_color)
+    for i = 1, #geometry.segments do
+        local segment = geometry.segments[i]
+        local segment_color = i <= active_segments and segment[3] or geometry.gray
+        lcd.drawAnnulus(xs, ys, radius - ring_width, radius, segment[1], segment[2], segment_color)
     end
 end
 function draw_power_gauge(center_x, center_y, radius, power_value, max_power, gauge_color, needle_color)
@@ -1013,33 +1064,41 @@ function draw_power_gauge(center_x, center_y, radius, power_value, max_power, ga
     local start_angle = 225
     local end_angle = 135
     local total_sweep = 270
+    local geometry = power_gauge_geometry_cache
+    if not geometry or geometry.x ~= center_x or geometry.y ~= center_y
+        or geometry.radius ~= radius or geometry.display_max ~= display_max then
+        geometry = { x = center_x, y = center_y, radius = radius, display_max = display_max, ticks = {} }
+        for i = 0, 10 do
+            local angle_rad = math.rad(start_angle - i * 27)
+            local tick_start_r = radius - 5
+            local tick_end_r = radius - 12
+            local tick = {
+                center_x + tick_start_r * math.cos(angle_rad),
+                center_y - tick_start_r * math.sin(angle_rad),
+                center_x + tick_end_r * math.cos(angle_rad),
+                center_y - tick_end_r * math.sin(angle_rad)
+            }
+            if i % 2 == 0 then
+                local tick_value = (display_max / 10) * i
+                tick[5] = tick_value >= 1000 and string.format("%.0fk", tick_value / 1000)
+                    or string.format("%.0f", tick_value)
+                local text_r = radius - 22
+                tick[6] = center_x + text_r * math.cos(angle_rad)
+                tick[7] = center_y - text_r * math.sin(angle_rad)
+            end
+            geometry.ticks[#geometry.ticks + 1] = tick
+        end
+        power_gauge_geometry_cache = geometry
+    end
     lcd.drawArc(center_x, center_y, radius, start_angle, 360, gauge_color)
     lcd.drawArc(center_x, center_y, radius - 2, start_angle, 360, gauge_color)
     lcd.drawArc(center_x, center_y, radius, 0, end_angle, gauge_color)
     lcd.drawArc(center_x, center_y, radius - 2, 0, end_angle, gauge_color)
-    local num_ticks = 11
-    for i = 0, num_ticks - 1 do
-        local angle_deg = start_angle - (i * 27)
-        local angle_rad = math.rad(angle_deg)
-        local tick_start_r = radius - 5
-        local tick_end_r = radius - 12
-        local x1 = center_x + tick_start_r * math.cos(angle_rad)
-        local y1 = center_y - tick_start_r * math.sin(angle_rad)
-        local x2 = center_x + tick_end_r * math.cos(angle_rad)
-        local y2 = center_y - tick_end_r * math.sin(angle_rad)
-        lcd.drawLine(x1, y1, x2, y2, SOLID, gauge_color)
-        if i % 2 == 0 then
-            local value = (display_max / 10) * i
-            local label = ""
-            if value >= 1000 then
-                label = string.format("%.0fk", value / 1000)
-            else
-                label = string.format("%.0f", value)
-            end
-            local text_r = radius - 22
-            local text_x = center_x + text_r * math.cos(angle_rad)
-            local text_y = center_y - text_r * math.sin(angle_rad)
-            lcd.drawText(text_x, text_y, label, SMLSIZE + gauge_color + CENTER + VCENTER)
+    for i = 1, #geometry.ticks do
+        local tick = geometry.ticks[i]
+        lcd.drawLine(tick[1], tick[2], tick[3], tick[4], SOLID, gauge_color)
+        if tick[5] then
+            lcd.drawText(tick[6], tick[7], tick[5], SMLSIZE + gauge_color + CENTER + VCENTER)
         end
     end
     local percentage = power_value / display_max
@@ -1057,48 +1116,64 @@ function draw_power_gauge(center_x, center_y, radius, power_value, max_power, ga
     lcd.drawText(center_x, center_y + 55, power_str,  needle_color + CENTER + VCENTER)
 end
 function draw_digital_display(x, y, value, num_digits, decimal_places, digit_size, color)
-    local seg_width = digit_size * 0.6
-    local seg_height = digit_size * 0.5
-    local seg_thickness = digit_size * 0.15
-    local digit_spacing = digit_size * 1.2
-    local gray_color = lcd.RGB(80, 80, 80)
-    local dot_size = seg_thickness
-    local multiplier = math.pow(10, decimal_places)
+    local geometry_key = num_digits * 100000 + decimal_places * 10000 + digit_size
+    local geometry = digital_geometry_cache[geometry_key]
+    if not geometry then
+        geometry = {
+            seg_width = digit_size * 0.6,
+            seg_height = digit_size * 0.5,
+            seg_thickness = digit_size * 0.15,
+            digit_spacing = digit_size * 1.2,
+            gray_color = lcd.RGB(80, 80, 80),
+            multiplier = 10 ^ decimal_places,
+            max_int_value = 10 ^ num_digits - 1,
+            int_divisors = {},
+            decimal_divisors = {}
+        }
+        for i = 0, num_digits - 1 do
+            geometry.int_divisors[i + 1] = 10 ^ (num_digits - 1 - i)
+        end
+        for i = 0, decimal_places - 1 do
+            geometry.decimal_divisors[i + 1] = 10 ^ (decimal_places - 1 - i)
+        end
+        digital_geometry_cache[geometry_key] = geometry
+    end
+    local seg_width = geometry.seg_width
+    local seg_height = geometry.seg_height
+    local seg_thickness = geometry.seg_thickness
+    local digit_spacing = geometry.digit_spacing
+    local gray_color = geometry.gray_color
+    local multiplier = geometry.multiplier
     local int_part = math.floor(value)
     local dec_part = math.floor((value - int_part) * multiplier + 0.5)
     if dec_part >= multiplier then
         int_part = int_part + 1
         dec_part = 0
     end
-    local max_int_value = math.pow(10, num_digits) - 1
-    int_part = math.min(max_int_value, int_part)
-    local int_value_digits = 0
-    if int_part == 0 then
-        int_value_digits = 1
-    else
-        int_value_digits = math.floor(math.log(int_part) / math.log(10)) + 1
-    end
+    int_part = math.min(geometry.max_int_value, int_part)
     local current_x = x
+    local significant_digit_seen = false
     for i = 0, num_digits - 1 do
-        local divisor = math.pow(10, num_digits - 1 - i)
+        local divisor = geometry.int_divisors[i + 1]
         local digit = math.floor(int_part / divisor) % 10
         local digit_color = gray_color
-        local is_leading_zero = true
-        if i >= (num_digits - int_value_digits) then
-            digit_color = color
-            is_leading_zero = false
+        if digit ~= 0 or i == num_digits - 1 then
+            significant_digit_seen = true
         end
-        draw_digit_segment(current_x, y, digit, seg_width, seg_height, seg_thickness, digit_color, gray_color)
+        if significant_digit_seen then
+            digit_color = color
+        end
+        draw_digit_segment(current_x, y, digit, seg_width, seg_height, seg_thickness, digit_color)
         current_x = current_x + digit_spacing
     end
     if decimal_places > 0 then
         local dot_y = y + seg_height * 2 + seg_thickness * 2
-        lcd.drawFilledRectangle(current_x - digit_spacing * 0.15, dot_y, dot_size, dot_size, color)
+        lcd.drawFilledRectangle(current_x - digit_spacing * 0.15, dot_y, seg_thickness, seg_thickness, color)
     end
     for i = 0, decimal_places - 1 do
-        local divisor = math.pow(10, decimal_places - 1 - i)
+        local divisor = geometry.decimal_divisors[i + 1]
         local digit = math.floor(dec_part / divisor) % 10
-        draw_digit_segment(current_x, y, digit, seg_width, seg_height, seg_thickness, color, gray_color)
+        draw_digit_segment(current_x, y, digit, seg_width, seg_height, seg_thickness, color)
         current_x = current_x + digit_spacing
     end
 end
@@ -1120,12 +1195,7 @@ local function refresh(widget, event, touchState)
     local date_time = getDateTime()
     local screen_width =  LCD_W or widget.zone.w
     local screen_height =  LCD_H or widget.zone.h
-    lcd.setColor(CUSTOM_COLOR, BLACK)
-    local bg_color = lcd.getColor(CUSTOM_COLOR)
-    lcd.setColor(CUSTOM_COLOR, widget.options.SquareColor)
-    local square_color = lcd.getColor(CUSTOM_COLOR)
-    lcd.setColor(CUSTOM_COLOR, widget.options.ValueColor)
-    local value_color = lcd.getColor(CUSTOM_COLOR)
+    local bg_color, square_color, value_color = get_widget_colors(widget)
     lcd.drawFilledRectangle(0, 0, screen_width, screen_height, bg_color)
     if not bg_pic_obj then
         bg_pic_obj = Bitmap.open(IMAGE_ROOT .. "/background.png")
@@ -1363,12 +1433,12 @@ local function refresh(widget, event, touchState)
             second[1] = second[1] + 1
             total_second = total_second + 1
         end
+        minutes[1] = string.format("%02d", math.floor(second[1] % 3600 / 60))
+        seconds[1] = string.format("%02d", second[1] % 3600 % 60)
+        hours = string.format("%02d", math.floor(total_second / 3600))
+        minutes[2] = string.format("%02d", math.floor(total_second % 3600 / 60))
+        seconds[2] = string.format("%02d", total_second % 3600 % 60)
     end
-    minutes[1] = string.format("%02d", math.floor(second[1] % 3600 / 60))
-    seconds[1] = string.format("%02d", second[1] % 3600 % 60)
-    hours = string.format("%02d", math.floor(total_second / 3600))
-    minutes[2] = string.format("%02d", math.floor(total_second % 3600 / 60))
-    seconds[2] = string.format("%02d", total_second % 3600 % 60)
     if write_en_flag and fly_number < 57 and second[1] > 30 then
         -- Current frame: prepare data only, do not perform any file I/O
         fly_number = fly_number + 1

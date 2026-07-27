@@ -114,6 +114,18 @@ Também é possível informar explicitamente a raiz que contém `WIDGETS/` e
 ./deploy.sh /run/media/$USER/EDGETX
 ```
 
+Para instalar uma versão publicada no GitHub, use `-v`. O script apresenta os
+10 releases mais recentes, baixa o pacote da versão escolhida e o instala usando
+as mesmas regras do deploy local:
+
+```bash
+./deploy.sh -v
+./deploy.sh -v /run/media/$USER/EDGETX
+./deploy.sh -v --dry-run /run/media/$USER/EDGETX
+```
+
+Esse modo requer `curl`, `unzip` e acesso à internet.
+
 O script compara os arquivos e copia somente os ausentes ou alterados. Os logs
 de voo e `/WIDGETS/DBK_TX16KMK3_config.json` existentes no rádio são sempre
 preservados.
