@@ -45,9 +45,9 @@ O foco deste projeto é entregar uma tela principal limpa, legível e otimizada 
   - bateria baixa
 - Alerta háptico triplo para bateria baixa
 - Controle opcional dos LEDs do rádio:
-  - azul quando armado
-  - vermelho quando desarmado
-  - animação vermelha em caso de `disable flag`
+  - cor configurável quando armado
+  - cor configurável quando desarmado
+  - animação na cor de desarmado em caso de `disable flag`
 - Uso das imagens do modelo a partir da pasta `/IMAGES` do cartão SD
 - Timer de voo por sessão
 - Contagem de voos por modelo
@@ -126,14 +126,18 @@ As imagens dos modelos agora são carregadas da pasta:
 /IMAGES/
 ```
 
-O nome do arquivo deve corresponder ao nome do modelo no rádio, normalmente **sem o primeiro caractere `>`** quando ele existir.
+O nome do arquivo deve corresponder ao nome do modelo no rádio. O caractere
+inicial `>` é opcional no nome do modelo e não faz parte do nome procurado para
+a imagem.
 
 Exemplo:
 
 - Nome do modelo no rádio: `>GOOSKYRS4`
 - Arquivo da imagem: `/IMAGES/GOOSKYRS4.png`
 
-Se a imagem do modelo não for encontrada, o widget usa a imagem padrão interna.
+Se a imagem com o nome do modelo não for encontrada, o widget tenta a imagem
+selecionada em **Model Setup** no EdgeTX. Se ela também não estiver disponível,
+usa a imagem padrão interna.
 
 ### Preparar imagens para o widget
 
@@ -178,11 +182,18 @@ O widget possui as seguintes opções:
 - `SquareColor`: cor dos textos e elementos secundários
 - `ValueColor`: cor dos valores principais
 - `DispLED`: habilita ou desabilita os LEDs do rádio
+- `ArmLED`: escolhe a cor dos LEDs quando o modelo está armado
+- `DisarmLED`: escolhe a cor dos LEDs quando o modelo está desarmado e a cor base da animação de `disable flags`
 - `UseGovernor`: habilita ou desabilita a leitura e exibição do governor
 - `HoldSwitch`: chave usada para congelar mínimos e máximos
 - `BatAlertPct`: percentual de bateria para disparo do alerta de bateria baixa
 
 O valor padrão inicial para `BatAlertPct` vem de `battery_alert_pct` no arquivo de configuração. Se essa chave não existir, o padrão usado é `25`.
+
+As opções `ArmLED` e `DisarmLED` oferecem vermelho, verde, azul, amarelo,
+ciano, magenta, branco, laranja, roxo e rosa. Os padrões são azul para armado
+e vermelho para desarmado. Assim como as demais opções do widget, esses valores
+são persistidos pelo próprio EdgeTX e não pelo arquivo JSON.
 
 ## Configuração em JSON
 

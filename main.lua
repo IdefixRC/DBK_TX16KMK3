@@ -38,9 +38,15 @@ local bank_info = { current = 1, name = "Bank 1" }
 
 -- Immutable drawing lookup tables. Keeping these outside refresh-time functions
 -- avoids rebuilding short-lived Lua tables on every frame.
-local LED_TRAIL_COLORS = {
-    { 255, 0, 0 }, { 224, 0, 0 }, { 176, 0, 0 },
-    { 128, 0, 0 }, { 80, 0, 0 }, { 48, 0, 0 }
+local LED_COLOR_NAMES = {
+    "Red", "Green", "Blue", "Yellow", "Cyan", "Magenta",
+    "White", "Orange", "Purple", "Pink"
+}
+local LED_COLORS = {
+    { 255,   0,   0 }, {   0, 255,   0 }, {   0,   0, 255 },
+    { 255, 255,   0 }, {   0, 255, 255 }, { 255,   0, 255 },
+    { 255, 255, 255 }, { 255, 100,   0 }, { 128,   0, 255 },
+    { 255,  40, 120 }
 }
 local GAUGE_SCALE_STEPS = { 0, 20, 40, 60, 80, 100 }
 local GOVERNOR_STATE_NAMES = {
@@ -65,6 +71,7 @@ local tg_pic_obj
 local bg_pic_obj
 local runtime_cache = {
     model_name = "",
+    model_bitmap = "",
     safe_model_name = "",
     log_date_stamp = "",
     pic_path = "",
@@ -145,6 +152,8 @@ local options = {
     { "SquareColor", COLOR, WHITE },
     { "ValueColor", COLOR, GREEN },
     { "DispLED", BOOL, 0 },
+    { "ArmLED", CHOICE, 3, LED_COLOR_NAMES },
+    { "DisarmLED", CHOICE, 1, LED_COLOR_NAMES },
     { "UseGovernor", BOOL, 1 },
     { "HoldSwitch", SWITCH, 0 },
     { "BatAlertPct", VALUE, DEFAULT_BATTERY_ALERT_PCT, 0, 100 }
@@ -164,6 +173,42 @@ local function sanitize_model_name(model_name)
     end
 
     return string.gsub(model_name, "[<>:\"/\\|?*]", "")
+end
+
+local function get_model_image_name(model_name)
+    if not model_name or model_name == "" then
+        return ""
+    end
+
+    if string.sub(model_name, 1, 1) == ">" then
+        model_name = string.sub(model_name, 2)
+    end
+
+    return sanitize_model_name(model_name)
+end
+
+local function resolve_model_image_path(model_info)
+    model_info = model_info or {}
+    local model_image_name = get_model_image_name(model_info.name)
+    if model_image_name ~= "" then
+        local model_image_path = MODEL_IMAGE_ROOT .. "/" .. model_image_name .. ".png"
+        if fstat(model_image_path) then
+            return model_image_path
+        end
+    end
+
+    local configured_bitmap = model_info.bitmap
+    if type(configured_bitmap) == "string" and configured_bitmap ~= "" then
+        configured_bitmap = sanitize_model_name(configured_bitmap)
+        if configured_bitmap ~= "" then
+            local configured_path = MODEL_IMAGE_ROOT .. "/" .. configured_bitmap
+            if fstat(configured_path) then
+                return configured_path
+            end
+        end
+    end
+
+    return nil
 end
 
 local function build_date_stamp(date_time)
@@ -190,7 +235,23 @@ local function set_led_strip_solid(red, green, blue)
     applyRGBLedColors()
 end
 
-local function set_led_strip_circulating_red(phase)
+local function scale_led_color(color, factor, minimum)
+    local scaled_color = {}
+    for channel = 1, 3 do
+        local value = math.floor(color[channel] * factor + 0.5)
+        if color[channel] > 0 then
+            value = math.max(minimum or 0, value)
+        end
+        scaled_color[channel] = math.min(255, value)
+    end
+    return scaled_color
+end
+
+local function led_color_key(mode, color)
+    return mode .. ":" .. color[1] .. "," .. color[2] .. "," .. color[3]
+end
+
+local function set_led_strip_circulating(phase, base_color)
     local half_length = math.max(1, math.floor(LED_STRIP_LENGTH / 2))
     local travel_length = math.max(1, half_length - 1)
     local cycle_length = math.max(1, (travel_length * 2))
@@ -200,17 +261,24 @@ local function set_led_strip_circulating_red(phase)
         scanner_position = cycle_length - scanner_position
     end
 
+    local trail_colors = {}
+    local intensities = { 1, 0.88, 0.69, 0.50, 0.31, 0.19 }
+    for i = 1, #intensities do
+        trail_colors[i] = scale_led_color(base_color, intensities[i])
+    end
+    local background = scale_led_color(base_color, 0.03, 1)
+
     for i = 0, LED_STRIP_LENGTH - 1 do
-        setRGBLedColor(i, 8, 0, 0)
+        setRGBLedColor(i, background[1], background[2], background[3])
     end
 
     for strip_index = 0, 1 do
         local strip_offset = strip_index * half_length
 
-        for trail_index = 1, #LED_TRAIL_COLORS do
+        for trail_index = 1, #trail_colors do
             local led_index = strip_offset + scanner_position + trail_index - 1
             if led_index < strip_offset + half_length and led_index < LED_STRIP_LENGTH then
-                local color = LED_TRAIL_COLORS[trail_index]
+                local color = trail_colors[trail_index]
                 setRGBLedColor(led_index, color[1], color[2], color[3])
             end
         end
@@ -220,9 +288,13 @@ local function set_led_strip_circulating_red(phase)
 end
 
 function update_led_strip(widget, is_armed, has_disable_flags)
-    if not LED_STRIP_LENGTH or LED_STRIP_LENGTH <= 0 then
+    if type(LED_STRIP_LENGTH) ~= "number" or LED_STRIP_LENGTH <= 0
+        or type(setRGBLedColor) ~= "function" or type(applyRGBLedColors) ~= "function" then
         return
     end
+
+    local armed_color = LED_COLORS[math.floor(tonumber(widget.options.ArmLED) or 3)] or LED_COLORS[3]
+    local disarmed_color = LED_COLORS[math.floor(tonumber(widget.options.DisarmLED) or 1)] or LED_COLORS[1]
 
     if widget.options.DispLED ~= 1 then
         if led_cache.mode ~= "OFF" then
@@ -235,22 +307,25 @@ function update_led_strip(widget, is_armed, has_disable_flags)
 
     if has_disable_flags then
         local phase = math.floor(getTime() / 2)
-        if led_cache.mode ~= "DISABLE" or led_cache.phase ~= phase then
-            led_cache.mode = "DISABLE"
+        local mode = led_color_key("DISABLE", disarmed_color)
+        if led_cache.mode ~= mode or led_cache.phase ~= phase then
+            led_cache.mode = mode
             led_cache.phase = phase
-            set_led_strip_circulating_red(phase)
+            set_led_strip_circulating(phase, disarmed_color)
         end
     elseif is_armed then
-        if led_cache.mode ~= "ARMED" then
-            led_cache.mode = "ARMED"
+        local mode = led_color_key("ARMED", armed_color)
+        if led_cache.mode ~= mode then
+            led_cache.mode = mode
             led_cache.phase = -1
-            set_led_strip_solid(0, 80, 255)
+            set_led_strip_solid(armed_color[1], armed_color[2], armed_color[3])
         end
     else
-        if led_cache.mode ~= "DISARMED" then
-            led_cache.mode = "DISARMED"
+        local mode = led_color_key("DISARMED", disarmed_color)
+        if led_cache.mode ~= mode then
+            led_cache.mode = mode
             led_cache.phase = -1
-            set_led_strip_solid(255, 0, 0)
+            set_led_strip_solid(disarmed_color[1], disarmed_color[2], disarmed_color[3])
         end
     end
 end
@@ -321,6 +396,7 @@ local function create(zone, options)
         field_id[i] = { 0, false }
     end
     runtime_cache.model_name = ""
+    runtime_cache.model_bitmap = ""
     runtime_cache.safe_model_name = ""
     runtime_cache.log_date_stamp = ""
     runtime_cache.pic_path = ""
@@ -329,6 +405,9 @@ local function create(zone, options)
     runtime_cache.battery_alert_interval = config.battery_alert_interval
     runtime_cache.total_flight_count = 0
     runtime_cache.daily_flight_count = 0
+    tg_pic_obj = nil
+    led_cache.mode = ""
+    led_cache.phase = -1
     telemetry_initialized = false
     for k, v in pairs(crsf_field) do
         local field_info = getFieldInfo(v)
@@ -1054,7 +1133,8 @@ local function refresh(widget, event, touchState)
     if bg_pic_obj then
         lcd.drawBitmap(bg_pic_obj, 0, 0)
     end
-    local model_name = model.getInfo().name or ""
+    local model_info = model.getInfo() or {}
+    local model_name = model_info.name or ""
     lcd.drawText(720, 414, model_name, RIGHT + MIDSIZE + value_color)
     if tg_pic_obj then
            lcd.drawBitmap(tg_pic_obj, 530, 190)        
@@ -1090,31 +1170,37 @@ local function refresh(widget, event, touchState)
         telemetry_initialized = true
     end
     local current_model_name = model_name
+    local current_model_bitmap = type(model_info.bitmap) == "string" and model_info.bitmap or ""
     local current_date_stamp = build_date_stamp(date_time)
     local should_load_log = false
+    local model_changed = current_model_name ~= runtime_cache.model_name
+    local model_bitmap_changed = current_model_bitmap ~= runtime_cache.model_bitmap
     if rqly_percent > 0 and not telemetry_initialized then
         telemetry_initialized = true
         should_load_log = true
     end
-    if current_model_name ~= runtime_cache.model_name and current_model_name ~= "" then
+    if model_changed and current_model_name ~= "" then
         runtime_cache.model_name = current_model_name
         runtime_cache.safe_model_name = sanitize_model_name(current_model_name)
-        runtime_cache.pic_path = MODEL_IMAGE_ROOT .. "/" .. string.sub(runtime_cache.model_name, 2) .. ".png"
         runtime_cache.log_date_stamp = current_date_stamp
         should_load_log = true
     elseif current_model_name ~= "" and runtime_cache.log_date_stamp ~= current_date_stamp then
         runtime_cache.log_date_stamp = current_date_stamp
         should_load_log = true
     end
-    if should_load_log and current_model_name and current_model_name ~= "" then
-        local safe_model_name = runtime_cache.safe_model_name ~= "" and runtime_cache.safe_model_name or sanitize_model_name(current_model_name)
-        local new_file_name = build_daily_log_file_name(safe_model_name, date_time)
-        local new_file_path = LOG_ROOT .. "/" .. new_file_name
-        if fstat(runtime_cache.pic_path) then
+    if current_model_name ~= "" and (model_changed or model_bitmap_changed) then
+        runtime_cache.model_bitmap = current_model_bitmap
+        runtime_cache.pic_path = resolve_model_image_path(model_info) or ""
+        if runtime_cache.pic_path ~= "" then
             tg_pic_obj = Bitmap.open(runtime_cache.pic_path)
         else
             tg_pic_obj = nil
         end
+    end
+    if should_load_log and current_model_name and current_model_name ~= "" then
+        local safe_model_name = runtime_cache.safe_model_name ~= "" and runtime_cache.safe_model_name or sanitize_model_name(current_model_name)
+        local new_file_name = build_daily_log_file_name(safe_model_name, date_time)
+        local new_file_path = LOG_ROOT .. "/" .. new_file_name
         file_name = new_file_name
         file_path = new_file_path
         log_data = {}
