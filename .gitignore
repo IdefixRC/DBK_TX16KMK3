@@ -1,0 +1,10 @@
+# EdgeTX compiles Lua scripts to .luac on the radio. These are build artifacts,
+# and a stale one on the SD card can shadow an updated .lua file.
+*.luac
+
+# Python tooling
+__pycache__/
+*.pyc
+
+# Release packaging output
+dist/
