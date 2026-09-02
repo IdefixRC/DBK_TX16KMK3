@@ -8,3 +8,6 @@ __pycache__/
 
 # Release packaging output
 dist/
+
+# Local AI agent instructions, not shared
+AGENTS.md
