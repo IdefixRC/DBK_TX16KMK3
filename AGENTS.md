@@ -10,7 +10,7 @@ Do not assume `ETHOS` APIs, storage behavior, UI controls, or widget conventions
 - Main runtime file: `main.lua`
 - Widget configuration helper: `config.lua`
 - Widget install path on SD: `/WIDGETS/DBK_TX16KMK3/`
-- Model images are loaded from `/IMAGES`
+- Model images are loaded from `/IMAGES`, and only from the image configured for the model in EdgeTX (`model.getInfo().bitmap`); there is no lookup derived from the model name
 - Audio assets are loaded from `/WIDGETS/DBK_TX16KMK3/audio`
 
 ## Configuration Rules

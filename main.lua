@@ -4,6 +4,7 @@ local WIDGET_DIR = "DBK_TX16KMK3"
 local WIDGET_ROOT = "/WIDGETS/" .. WIDGET_DIR
 local IMAGE_ROOT = WIDGET_ROOT .. "/image"
 local MODEL_IMAGE_ROOT = "/IMAGES"
+local MODEL_IMAGE_EXTS = { ".png", ".bmp", ".jpg" }
 local AUDIO_ROOT = WIDGET_ROOT .. "/audio"
 local LOG_ROOT = WIDGET_ROOT .. "/logs"
 local SYSTEM_LOG_ROOT = LOG_ROOT .. "/System"
@@ -178,36 +179,31 @@ local function sanitize_model_name(model_name)
     return string.gsub(model_name, "[<>:\"/\\|?*]", "")
 end
 
-local function get_model_image_name(model_name)
-    if not model_name or model_name == "" then
-        return ""
-    end
-
-    if string.sub(model_name, 1, 1) == ">" then
-        model_name = string.sub(model_name, 2)
-    end
-
-    return sanitize_model_name(model_name)
-end
-
 local function resolve_model_image_path(model_info)
     model_info = model_info or {}
-    local model_image_name = get_model_image_name(model_info.name)
-    if model_image_name ~= "" then
-        local model_image_path = MODEL_IMAGE_ROOT .. "/" .. model_image_name .. ".png"
-        if fstat(model_image_path) then
-            return model_image_path
-        end
-    end
 
     local configured_bitmap = model_info.bitmap
-    if type(configured_bitmap) == "string" and configured_bitmap ~= "" then
-        configured_bitmap = sanitize_model_name(configured_bitmap)
-        if configured_bitmap ~= "" then
-            local configured_path = MODEL_IMAGE_ROOT .. "/" .. configured_bitmap
-            if fstat(configured_path) then
-                return configured_path
-            end
+    if type(configured_bitmap) ~= "string" or configured_bitmap == "" then
+        return nil
+    end
+
+    configured_bitmap = sanitize_model_name(configured_bitmap)
+    if configured_bitmap == "" then
+        return nil
+    end
+
+    if string.find(configured_bitmap, "%.%a+$") then
+        local configured_path = MODEL_IMAGE_ROOT .. "/" .. configured_bitmap
+        if fstat(configured_path) then
+            return configured_path
+        end
+        return nil
+    end
+
+    for i = 1, #MODEL_IMAGE_EXTS do
+        local configured_path = MODEL_IMAGE_ROOT .. "/" .. configured_bitmap .. MODEL_IMAGE_EXTS[i]
+        if fstat(configured_path) then
+            return configured_path
         end
     end
 
