@@ -1,5 +1,5 @@
 local NAME = "DBK_TX16KMK3"
-local VERSION = "v1.0.6"
+local VERSION = "v1.0.7"
 local WIDGET_DIR = "DBK_TX16KMK3"
 local WIDGET_ROOT = "/WIDGETS/" .. WIDGET_DIR
 local IMAGE_ROOT = WIDGET_ROOT .. "/image"
