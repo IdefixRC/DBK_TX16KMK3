@@ -70,7 +70,7 @@ SD card.
 
 ## Installation
 
-[Download the latest release](https://github.com/IdefixRC/DBK_TX16KMK3/releases/latest)
+[Download the latest release .zip file](https://github.com/IdefixRC/DBK_TX16KMK3/releases/latest)
 
 Then:
 
