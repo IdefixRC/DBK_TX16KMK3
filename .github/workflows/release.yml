@@ -31,7 +31,6 @@ jobs:
           mkdir -p "${PACKAGE_ROOT}"
 
           cp main.lua "${PACKAGE_ROOT}/"
-          cp config.lua "${PACKAGE_ROOT}/"
           cp SettingScript.txt "${PACKAGE_ROOT}/"
           cp -R audio "${PACKAGE_ROOT}/"
           cp -R image "${PACKAGE_ROOT}/"

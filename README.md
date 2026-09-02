@@ -44,7 +44,7 @@ SD card.
 - `ARM` status, with `disable flags` taking priority
 - `Governor` state display
 - Flight counter and flight timer
-- Pilot name read from a configuration file on the SD card
+- Pilot name set directly in the widget options
 - Audio alerts for:
   - armed
   - disarmed
@@ -89,15 +89,8 @@ The main widget files should end up like this:
 
 ```text
 /WIDGETS/DBK_TX16KMK3/main.lua
-/WIDGETS/DBK_TX16KMK3/config.lua
 /WIDGETS/DBK_TX16KMK3/audio/
 /WIDGETS/DBK_TX16KMK3/image/
-```
-
-To set the pilot name shown in the widget footer, also create this file:
-
-```text
-/WIDGETS/DBK_TX16KMK3_config.json
 ```
 
 Then on the radio:
@@ -134,50 +127,18 @@ The widget has the following options:
 - `DisarmLED`: LED colour while the model is disarmed, and the base colour of the `disable flags` animation
 - `UseGovernor`: enables or disables reading and showing the governor
 - `HoldSwitch`: switch used to freeze minimums and maximums
-- `BatAlertPct`: battery percentage that triggers the low battery alert
-
-The initial default for `BatAlertPct` comes from `battery_alert_pct` in the configuration
-file. If that key is missing, the default is `25`.
+- `BatAlertPct`: battery percentage that triggers the low battery alert, default `25`
+- `AlertIntvl`: seconds between repeated low battery alerts, default `10`
+- `PilotName`: name shown in the footer, default `Rotorflight`
 
 `ArmLED` and `DisarmLED` offer red, green, blue, yellow, cyan, magenta, white, orange,
-purple and pink. The defaults are blue for armed and red for disarmed. Like the other
-widget options, these values are stored by EdgeTX itself, not in the JSON file.
+purple and pink. The defaults are blue for armed and red for disarmed.
 
-## JSON configuration
+Every setting lives in the widget options and is stored by EdgeTX itself. There is no
+configuration file to create or edit.
 
-The widget reads settings from:
-
-```text
-/WIDGETS/DBK_TX16KMK3_config.json
-```
-
-It currently supports these keys:
-
-- `pilot_name`: name shown in the footer
-- `battery_alert_pct`: default percentage for the battery alert
-- `battery_alert_interval`: interval between low battery alerts, in seconds
-
-Example:
-
-```json
-{
-  "pilot_name": "Victor",
-  "battery_alert_pct": 25,
-  "battery_alert_interval": 10
-}
-```
-
-If the file is missing, empty, or does not carry one of these keys, the widget uses these
-defaults:
-
-```text
-pilot_name = Rotorflight
-battery_alert_pct = 25
-battery_alert_interval = 10
-```
-
-At startup, if `/WIDGETS/DBK_TX16KMK3_config.json` is missing or empty, the widget tries
-to create it automatically with the default values.
+`PilotName` is an EdgeTX text option, so it is limited to 12 characters. Leave it empty
+to fall back to `Rotorflight`.
 
 ## Changes in this fork
 
@@ -189,6 +150,9 @@ to create it automatically with the default values.
   Documentation screenshots live in `doc/images/` and are no longer shipped to the radio.
 - Compiled `.luac` artifacts are ignored, so a stale one cannot shadow an updated
   `main.lua`.
+- Pilot name, battery alert percentage and alert interval are widget options now. The
+  `/WIDGETS/DBK_TX16KMK3_config.json` file and `config.lua` that read it are gone, so
+  everything is configured on the radio.
 - The `deploy.sh` installer is gone. Installing the widget means copying files to the SD
   card, and a 290 line shell script that probes mount points and downloads GitHub
   releases is more machinery than a file copy needs.
