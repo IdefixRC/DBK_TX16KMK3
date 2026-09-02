@@ -70,14 +70,13 @@ SD card.
 
 ## Installation
 
-Download the most recent `.zip` release here:
+[Download the latest release](https://github.com/IdefixRC/DBK_TX16KMK3/releases/latest)
 
-[Download DBK_TX16KMK3 v1.0.7 (.zip)](https://github.com/IdefixRC/DBK_TX16KMK3/releases/download/v1.0.7/DBK_TX16KMK3-v1.0.7.zip)
+Then:
 
-After downloading:
-
-1. Extract the `.zip` file.
-2. Copy the `DBK_TX16KMK3` folder to the radio SD card.
+1. Download the `DBK_TX16KMK3-<version>.zip` asset from that page.
+2. Extract it.
+3. Copy the `DBK_TX16KMK3` folder to the radio SD card.
 
 Copy the contents of this project into the following folder on the SD card:
 
