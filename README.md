@@ -107,14 +107,6 @@ Then on the radio:
 3. Select the `DBK_TX16KMK3` widget.
 4. Adjust the options as needed.
 
-### Deploying from a computer
-
-On Windows, the VS Code task **Deploy to radio folder** runs `.vscode/deploy-radio.ps1`,
-which mirrors the widget files to the radio using `robocopy`.
-
-Otherwise copy the files onto the SD card by hand, as described above. Installing this
-widget is a file copy, and the project keeps it that way.
-
 ## Model images
 
 Model images come from one place only:
