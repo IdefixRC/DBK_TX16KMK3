@@ -36,8 +36,7 @@ jobs:
           cp README.md "${PACKAGE_ROOT}/"
           cp SettingScript.txt "${PACKAGE_ROOT}/"
           cp -R audio "${PACKAGE_ROOT}/"
-          cp -R Image "${PACKAGE_ROOT}/"
-          cp -R modelImage "${PACKAGE_ROOT}/"
+          cp -R image "${PACKAGE_ROOT}/"
           cp -R logs "${PACKAGE_ROOT}/"
 
           (

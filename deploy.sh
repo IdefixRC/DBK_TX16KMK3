@@ -4,10 +4,10 @@ set -euo pipefail
 
 usage() {
   cat <<'EOF'
-Uso:
-  ./deploy.sh [-v] [--dry-run] [/caminho/para/raiz-do-cartao]
+Usage:
+  ./deploy.sh [-v] [--dry-run] [/path/to/card-root]
 
-Exemplos:
+Examples:
   ./deploy.sh
   ./deploy.sh -v
   ./deploy.sh -v /run/media/$USER/EDGETX
@@ -15,16 +15,16 @@ Exemplos:
   ./deploy.sh --dry-run /run/media/$USER/EDGETX
   ./deploy.sh /run/media/$USER/EDGETX
 
-Sem um destino, o script procura automaticamente um cartao EdgeTX montado em
-/run/media, /media ou /mnt. O destino explicito deve ser a raiz do cartao SD,
-onde ficam WIDGETS/ e IMAGES/.
+Without a destination, the script automatically looks for an EdgeTX card
+mounted under /run/media, /media or /mnt. An explicit destination must be the
+root of the SD card, the level that holds WIDGETS/ and IMAGES/.
 
-O deploy copia somente os arquivos do widget, audios e imagens. Logs de voo e
-/WIDGETS/DBK_TX16KMK3_config.json existentes no radio nunca sao removidos.
+The deploy copies only the widget files, audio and images. Flight logs and an
+existing /WIDGETS/DBK_TX16KMK3_config.json on the radio are never removed.
 
-Com -v, o script consulta os releases publicados no GitHub, mostra as 10
-versoes mais recentes e instala a versao escolhida. Esse modo requer curl,
-unzip e acesso a internet.
+With -v, the script queries the releases published on GitHub, lists the 10 most
+recent versions and installs the one you pick. That mode needs curl, unzip and
+internet access.
 EOF
 }
 
@@ -37,13 +37,13 @@ while [[ $# -gt 0 ]]; do
     --dry-run) dry_run=true ;;
     -h|--help) usage; exit 0 ;;
     -*)
-      printf 'Erro: opcao desconhecida: %s\n' "$1" >&2
+      printf 'Error: unknown option: %s\n' "$1" >&2
       usage >&2
       exit 2
       ;;
     *)
       if [[ -n $radio_root ]]; then
-        printf 'Erro: informe no maximo um destino.\n' >&2
+        printf 'Error: give at most one destination.\n' >&2
         usage >&2
         exit 2
       fi
@@ -84,16 +84,16 @@ detect_radio_root() {
 
   if [[ ${#candidates[@]} -eq 1 ]]; then
     radio_root=${candidates[0]}
-    printf 'Radio EdgeTX detectado automaticamente: %s\n' "$radio_root"
+    printf 'EdgeTX radio detected automatically: %s\n' "$radio_root"
     return
   fi
   if [[ ${#candidates[@]} -eq 0 ]]; then
-    printf 'Erro: nenhum cartao EdgeTX montado foi detectado.\n' >&2
+    printf 'Error: no mounted EdgeTX card was detected.\n' >&2
   else
-    printf 'Erro: mais de um cartao EdgeTX foi detectado:\n' >&2
+    printf 'Error: more than one EdgeTX card was detected:\n' >&2
     printf '  %s\n' "${candidates[@]}" >&2
   fi
-  printf 'Informe a raiz desejada: ./deploy.sh /caminho/para/o/cartao\n' >&2
+  printf 'Name the root you want: ./deploy.sh /path/to/the/card\n' >&2
   exit 1
 }
 
@@ -112,7 +112,7 @@ trap cleanup EXIT
 require_command() {
   local command_name=$1
   if ! command -v "$command_name" >/dev/null 2>&1; then
-    printf 'Erro: o modo -v requer o comando %s.\n' "$command_name" >&2
+    printf 'Error: -v mode requires the %s command.\n' "$command_name" >&2
     exit 1
   fi
 }
@@ -125,11 +125,11 @@ select_release() {
   local release_json selection selected_tag asset_url archive_path
   local -a release_tags=()
 
-  printf 'Consultando releases no GitHub...\n'
+  printf 'Querying releases on GitHub...\n'
   if ! release_json=$(curl -fsSL --retry 2 --connect-timeout 10 \
       -H 'Accept: application/vnd.github+json' \
       -H 'X-GitHub-Api-Version: 2022-11-28' "$api_url"); then
-    printf 'Erro: nao foi possivel consultar os releases no GitHub.\n' >&2
+    printf 'Error: could not query the releases on GitHub.\n' >&2
     exit 1
   fi
 
@@ -139,60 +139,60 @@ select_release() {
       | head -n 10
   )
   if [[ ${#release_tags[@]} -eq 0 ]]; then
-    printf 'Erro: nenhum release publicado foi encontrado.\n' >&2
+    printf 'Error: no published release was found.\n' >&2
     exit 1
   fi
 
-  printf 'Versoes disponiveis:\n'
+  printf 'Available versions:\n'
   local index
   for index in "${!release_tags[@]}"; do
     printf '  %d) %s\n' "$((index + 1))" "${release_tags[index]}"
   done
-  printf '  0) Cancelar\n'
-  printf 'Escolha uma versao: '
+  printf '  0) Cancel\n'
+  printf 'Choose a version: '
   if ! read -r selection; then
-    printf '\nErro: nao foi possivel ler a versao escolhida.\n' >&2
+    printf '\nError: could not read the chosen version.\n' >&2
     exit 1
   fi
   if [[ $selection == 0 ]]; then
-    printf 'Instalacao cancelada.\n'
+    printf 'Installation cancelled.\n'
     exit 0
   fi
   if [[ ! $selection =~ ^[0-9]+$ ]] || (( selection < 1 || selection > ${#release_tags[@]} )); then
-    printf 'Erro: escolha invalida: %s\n' "$selection" >&2
+    printf 'Error: invalid choice: %s\n' "$selection" >&2
     exit 2
   fi
 
   selected_tag=${release_tags[selection - 1]}
   if [[ ! $selected_tag =~ ^[A-Za-z0-9._-]+$ ]]; then
-    printf 'Erro: tag de release invalida: %s\n' "$selected_tag" >&2
+    printf 'Error: invalid release tag: %s\n' "$selected_tag" >&2
     exit 1
   fi
 
   temporary_dir=$(mktemp -d "${TMPDIR:-/tmp}/dbk-tx16kmk3-release.XXXXXX")
   archive_path=$temporary_dir/DBK_TX16KMK3.zip
   asset_url="https://github.com/vhuzalo/DBK_TX16KMK3/releases/download/$selected_tag/DBK_TX16KMK3-$selected_tag.zip"
-  printf 'Baixando DBK_TX16KMK3 %s...\n' "$selected_tag"
+  printf 'Downloading DBK_TX16KMK3 %s...\n' "$selected_tag"
   if ! curl -fL --retry 2 --connect-timeout 10 -o "$archive_path" "$asset_url"; then
-    printf 'Erro: nao foi possivel baixar o pacote do release %s.\n' "$selected_tag" >&2
+    printf 'Error: could not download the package for release %s.\n' "$selected_tag" >&2
     exit 1
   fi
   if ! unzip -tq "$archive_path" >/dev/null; then
-    printf 'Erro: o pacote baixado esta corrompido ou nao e um ZIP valido.\n' >&2
+    printf 'Error: the downloaded package is corrupt or not a valid ZIP.\n' >&2
     exit 1
   fi
   if ! unzip -q "$archive_path" -d "$temporary_dir"; then
-    printf 'Erro: nao foi possivel extrair o pacote do release.\n' >&2
+    printf 'Error: could not extract the release package.\n' >&2
     exit 1
   fi
 
   source_dir=$temporary_dir/DBK_TX16KMK3
   if [[ ! -d $source_dir ]]; then
-    printf 'Erro: estrutura inesperada no pacote do release %s.\n' "$selected_tag" >&2
+    printf 'Error: unexpected structure in the package for release %s.\n' "$selected_tag" >&2
     exit 1
   fi
   selected_release=$selected_tag
-  printf 'Release selecionado: %s\n' "$selected_tag"
+  printf 'Selected release: %s\n' "$selected_tag"
 }
 
 if $release_mode; then
@@ -204,30 +204,30 @@ if [[ -z $radio_root ]]; then
 fi
 
 if [[ ! -d $radio_root ]]; then
-  printf 'Erro: o destino nao existe ou nao e uma pasta: %s\n' "$radio_root" >&2
+  printf 'Error: the destination does not exist or is not a folder: %s\n' "$radio_root" >&2
   exit 1
 fi
 
 case $radio_root in
   ""|/|"$script_dir")
-    printf 'Erro: destino inseguro: %s\n' "$radio_root" >&2
+    printf 'Error: unsafe destination: %s\n' "$radio_root" >&2
     exit 1
     ;;
 esac
 
 required_files=(
   main.lua
-  Image/background.png
-  Image/default.png
-  Image/hold1.png
-  Image/hold2.png
+  image/background.png
+  image/default.png
+  image/hold1.png
+  image/hold2.png
 )
 if ! $release_mode; then
   required_files+=(config.lua)
 fi
 for relative_path in "${required_files[@]}"; do
   if [[ ! -f $source_dir/$relative_path ]]; then
-    printf 'Erro: arquivo necessario nao encontrado: %s\n' "$relative_path" >&2
+    printf 'Error: required file not found: %s\n' "$relative_path" >&2
     exit 1
   fi
 done
@@ -242,16 +242,16 @@ copy_file() {
   fi
   if $dry_run; then
     if [[ -e $destination ]]; then
-      printf '[dry-run] Atualizar: %s\n' "$display_path"
+      printf '[dry-run] Update: %s\n' "$display_path"
     else
-      printf '[dry-run] Instalar: %s\n' "$display_path"
+      printf '[dry-run] Install: %s\n' "$display_path"
     fi
     return
   fi
 
   mkdir -p -- "$(dirname -- "$destination")"
   cp -p -- "$source" "$destination"
-  printf 'Atualizado: %s\n' "$display_path"
+  printf 'Updated: %s\n' "$display_path"
 }
 
 copy_tree_files() {
@@ -268,23 +268,22 @@ copy_tree_files() {
 }
 
 widget_destination=$radio_root/WIDGETS/DBK_TX16KMK3
-printf 'Destino do radio: %s\n' "$radio_root"
+printf 'Radio destination: %s\n' "$radio_root"
 
 copy_file "$source_dir/main.lua" "$widget_destination/main.lua"
 if [[ -f $source_dir/config.lua ]]; then
   copy_file "$source_dir/config.lua" "$widget_destination/config.lua"
 fi
-copy_file "$source_dir/Image/background.png" "$widget_destination/image/background.png"
-copy_file "$source_dir/Image/default.png" "$widget_destination/image/default.png"
-copy_file "$source_dir/Image/hold1.png" "$widget_destination/image/hold1.png"
-copy_file "$source_dir/Image/hold2.png" "$widget_destination/image/hold2.png"
+copy_file "$source_dir/image/background.png" "$widget_destination/image/background.png"
+copy_file "$source_dir/image/default.png" "$widget_destination/image/default.png"
+copy_file "$source_dir/image/hold1.png" "$widget_destination/image/hold1.png"
+copy_file "$source_dir/image/hold2.png" "$widget_destination/image/hold2.png"
 copy_tree_files "$source_dir/audio" "$widget_destination/audio" '*.wav'
-copy_tree_files "$source_dir/modelImage" "$radio_root/IMAGES" '*.png'
 
 if $dry_run; then
-  printf 'Dry-run concluido; nenhum arquivo foi alterado.\n'
+  printf 'Dry-run finished; no file was changed.\n'
 elif [[ -n $selected_release ]]; then
-  printf 'Deploy do DBK_TX16KMK3 %s concluido.\n' "$selected_release"
+  printf 'DBK_TX16KMK3 %s deploy finished.\n' "$selected_release"
 else
-  printf 'Deploy do DBK_TX16KMK3 concluido.\n'
+  printf 'DBK_TX16KMK3 deploy finished.\n'
 fi
