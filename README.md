@@ -72,7 +72,7 @@ SD card.
 
 Download the most recent `.zip` release here:
 
-[Download DBK_TX16KMK3 v1.0.6 (.zip)](https://github.com/vhuzalo/DBK_TX16KMK3/releases/download/v1.0.6/DBK_TX16KMK3-v1.0.6.zip)
+[Download DBK_TX16KMK3 v1.0.7 (.zip)](https://github.com/IdefixRC/DBK_MK3Mini/releases/download/v1.0.7/DBK_TX16KMK3-v1.0.7.zip)
 
 After downloading:
 
@@ -193,37 +193,6 @@ to create it automatically with the default values.
   card, and a 290 line shell script that probes mount points and downloads GitHub
   releases is more machinery than a file copy needs.
 
-## What's new in v1.0.6
-
-- model images found with or without the `>` prefix in the name
-- fallback to the image configured in EdgeTX Model Setup before the default image
-- configurable LED colours for the armed and disarmed states
-- `disable flags` animation using the colour chosen for disarmed
-- new caches for geometry, displays, colours, timers and animations, to reduce CPU use
-
-## What's new in v1.0.5
-
-- reduced memory use and temporary table creation while drawing
-- removed the curve collection that was already marked as disabled
-- JSON reload cut to once per minute, and debug output limited to startup
-- rendering limited to 10 FPS, with gauge geometry reused between frames
-- fixed the full-screen behaviour triggered by touching the EdgeTX screen
-
-## What's new in v1.0.3
-
-- fixed the low battery alert so it respects the value stored in `BatAlertPct` in the widget options
-- removed the runtime overwrite of the alert percentage from the JSON, which kept the warning firing on an old value
-
-## What's new in v1.0.2
-
-- `BatAlertPct` switched to a numeric input, easier to adjust with the scroller
-- pilot name moved out of the widget options and into a JSON file on the SD card
-- new `/WIDGETS/DBK_TX16KMK3_config.json` file for settings that persist outside the widget folder
-- support for the `pilot_name`, `battery_alert_pct` and `battery_alert_interval` keys
-- the configuration file is created automatically with default values when missing or empty
-- configuration reloaded at runtime
-- configuration logic extracted into `config.lua`, leaving `main.lua` cleaner
-
 ## Expected telemetry
 
 The widget is built to work with Rotorflight/CRSF sensors such as:
@@ -334,4 +303,4 @@ no effect here.
 
 ## Version
 
-Current widget version: **v1.0.6**. This fork is based on that release.
+Current widget version: **v1.0.7**.
