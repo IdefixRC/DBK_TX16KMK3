@@ -2,7 +2,7 @@
   "version": "2.0.0",
   "tasks": [
     {
-      "label": "Deploy para pasta do radio",
+      "label": "Deploy to radio folder",
       "type": "shell",
       "command": "powershell",
       "args": [
@@ -31,7 +31,7 @@
     {
       "id": "radioRoot",
       "type": "promptString",
-      "description": "Pasta raiz do cartao SD do radio",
+      "description": "Root folder of the radio SD card",
       "default": "E:\\"
     }
   ]

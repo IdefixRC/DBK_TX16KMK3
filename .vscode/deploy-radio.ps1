@@ -11,19 +11,19 @@ $ErrorActionPreference = "Stop"
 
 $resolvedRadioRoot = $RadioRoot.Trim('"')
 if (-not (Test-Path -LiteralPath $resolvedRadioRoot)) {
-    throw "Pasta do radio nao encontrada: $resolvedRadioRoot"
+    throw "Radio folder not found: $resolvedRadioRoot"
 }
 
 $destination = Join-Path $resolvedRadioRoot "WIDGETS\DBK_TX16KMK3"
 New-Item -ItemType Directory -Force -Path $destination | Out-Null
 
-Write-Host "Deploy de $Source para $destination"
+Write-Host "Deploying $Source to $destination"
 
-robocopy $Source $destination /MIR /XD .git .github .agents .vscode /XF *.code-workspace
+robocopy $Source $destination /MIR /XD .git .github .agents .vscode doc tools release-notes /XF *.code-workspace
 $exitCode = $LASTEXITCODE
 
 if ($exitCode -gt 7) {
-    throw "Falha no deploy via robocopy. Codigo: $exitCode"
+    throw "robocopy deploy failed. Code: $exitCode"
 }
 
-Write-Host "Deploy concluido com sucesso."
+Write-Host "Deploy finished successfully."
