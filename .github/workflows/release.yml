@@ -56,7 +56,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          NOTES_FILE="release-notes/${GITHUB_REF_NAME}.md"
+          NOTES_FILE="doc/release-notes/${GITHUB_REF_NAME}.md"
           if [ -f "${NOTES_FILE}" ]; then
             gh release create "${GITHUB_REF_NAME}" "${{ steps.build_release_package.outputs.asset_name }}" \
               --title "${GITHUB_REF_NAME}" \

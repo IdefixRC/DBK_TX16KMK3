@@ -123,40 +123,6 @@ without a leading `>`.
 If the model has no image assigned, or the assigned file is missing from `/IMAGES/`, the
 widget falls back to its own default picture.
 
-### Preparing images for the widget
-
-The [`tools/resize_model_image.py`](tools/resize_model_image.py) helper writes a
-`250x150 px` PNG, keeps the aspect ratio of the original and centres the result on a
-black background. It needs Python 3 and the Pillow library:
-
-```bash
-python3 -m pip install Pillow
-```
-
-From the repository root, pass it the source image and, optionally, the output file:
-
-```bash
-python3 tools/resize_model_image.py model-photo.jpg /IMAGES/GOOSKYRS4.png
-```
-
-Without the second argument, the file is written next to the source image with a
-`_dbk.png` suffix:
-
-```bash
-python3 tools/resize_model_image.py model-photo.jpg
-```
-
-To strip the background automatically before resizing, install `rembg` as well and add
-`--remove-background`:
-
-```bash
-python3 -m pip install rembg
-python3 tools/resize_model_image.py model-photo.png /IMAGES/GOOSKYRS4.png --remove-background
-```
-
-Copy the generated PNG to `/IMAGES/` on the SD card, then assign it to the model in
-EdgeTX **Model Setup**.
-
 ## Widget configuration
 
 The widget has the following options:
@@ -355,8 +321,7 @@ Check, in order:
 
 1. The model has an image assigned in EdgeTX **Model Setup**.
 2. That file actually exists in `/IMAGES/` on the SD card.
-3. The image is in a format EdgeTX can open. Use `tools/resize_model_image.py` to produce
-   a known-good `250x150 px` PNG.
+3. The image is in a format EdgeTX can open. A `250x150 px` PNG works well.
 
 The widget no longer looks for an image matching the model name, so renaming a model has
 no effect here.
@@ -364,7 +329,7 @@ no effect here.
 ## Notes
 
 - This project targets **EdgeTX**, not Ethos
-- The `doc/`, `tools/` and `release-notes/` folders are not part of the radio installation
+- The `doc/` folder is documentation only and is not part of the radio installation
 - The `image/` folder holds the pictures the widget draws; `doc/images/` holds documentation screenshots only
 
 ## Version
