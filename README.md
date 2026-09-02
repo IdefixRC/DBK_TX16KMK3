@@ -364,7 +364,7 @@ no effect here.
 ## Notes
 
 - This project targets **EdgeTX**, not Ethos
-- The `.vscode/`, `doc/`, `tools/` and `release-notes/` folders are not part of the radio installation
+- The `doc/`, `tools/` and `release-notes/` folders are not part of the radio installation
 - The `image/` folder holds the pictures the widget draws; `doc/images/` holds documentation screenshots only
 
 ## Version
