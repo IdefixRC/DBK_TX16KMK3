@@ -72,7 +72,7 @@ SD card.
 
 Download the most recent `.zip` release here:
 
-[Download DBK_TX16KMK3 v1.0.7 (.zip)](https://github.com/IdefixRC/DBK_MK3Mini/releases/download/v1.0.7/DBK_TX16KMK3-v1.0.7.zip)
+[Download DBK_TX16KMK3 v1.0.7 (.zip)](https://github.com/IdefixRC/DBK_TX16KMK3/releases/download/v1.0.7/DBK_TX16KMK3-v1.0.7.zip)
 
 After downloading:
 
