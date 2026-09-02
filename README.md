@@ -1,122 +1,131 @@
 <div align="center">
-  <img src="Image/readme-preview.png" alt="DBK TX16 MK3" width="420"/>
+  <img src="doc/images/readme-preview.png" alt="DBK TX16 MK3" width="420"/>
 </div>
 
 # DBK_TX16KMK3
 
-> Esta versao e uma adaptacao baseada no projeto/fork original `DBK` para a plataforma **TX16 MK3**, com ajustes e evolucoes para este repositorio.
+> **This is a fork of a fork.** Two people did the work this repository builds on:
 >
-> Fica aqui o agradecimento ao criador original pelo trabalho inicial, pela ideia do layout e pela base que tornou esta continuacao possivel.
+> - **Bei Ke** ([liuhm2019-crypto/DBK_TX16KMK3](https://github.com/liuhm2019-crypto/DBK_TX16KMK3))
+>   wrote the original DBK telemetry widget, the layout idea and the base that made
+>   everything after it possible.
+> - **Vagner Huzalo** ([vhuzalo/DBK_TX16KMK3](https://github.com/vhuzalo/DBK_TX16KMK3))
+>   rebuilt it for the **TX16 MK3** and added the audio alerts, RGB LED control, JSON
+>   configuration, performance work and deploy tooling. This fork starts from his v1.0.6.
 >
-> Se o projeto original tambem foi util para voce, considere prestigiar e apoiar o autor original da mesma forma sugerida por ele, inclusive com doacao quando essa opcao estiver disponivel.
+> The plan here is to keep developing the script and to offer worthwhile features and
+> fixes back to them, not to split the project.
 >
-> **Donate**  
-> If you find DBK Telemetry Script useful, please consider supporting the development by donating via PayPal: `aliuge2000@163.com`  
-> When donating, feel free to include your email address — I will send you new features for early testing!
+> **Donate**
+> If you find the DBK Telemetry Script useful, please consider supporting the original
+> author by donating via PayPal: `aliuge2000@163.com`
+> When donating, feel free to include your email address, and new features will be sent
+> to you for early testing.
 
-Widget de telemetria para **EdgeTX** voltado ao uso com **Rotorflight** em rádios da linha **RadioMaster TX16 MK3**.
+Telemetry widget for **EdgeTX**, built for **Rotorflight** on **RadioMaster TX16 MK3** radios.
 
-O foco deste projeto é entregar uma tela principal limpa, legível e otimizada para helicópteros, com informações de voo, estado de arm, governor, alertas sonoros e integração com as imagens do modelo no cartão SD.
+The goal of this project is a clean, readable main screen tuned for helicopters, showing
+flight information, arm state, governor, audio alerts and the model images stored on the
+SD card.
 
-## Funcionalidades
+## Features
 
-- Tela principal em layout dedicado para TX16 MK3
-- Exibição em tempo real de:
-  - RSSI/link quality
+- Main screen laid out specifically for the TX16 MK3
+- Real-time display of:
+  - RSSI / link quality
   - RPM
-  - tensão principal
-  - tensão por célula
-  - tensão de BEC
-  - temperatura
-  - corrente
-  - consumo de bateria
-  - percentual de bateria
-- Status de `ARM` com prioridade para `disable flags`
-- Exibição do estado do `Governor`
-- Contador de voos e timer de voo
-- Nome do piloto usando arquivo de configuração no cartão SD
-- Alertas sonoros para:
-  - armado
-  - desarmado
+  - main voltage
+  - voltage per cell
+  - BEC voltage
+  - temperature
+  - current
+  - battery consumption
+  - battery percentage
+- `ARM` status, with `disable flags` taking priority
+- `Governor` state display
+- Flight counter and flight timer
+- Pilot name read from a configuration file on the SD card
+- Audio alerts for:
+  - armed
+  - disarmed
   - governor `OFF`
   - governor `SPOOLUP`
   - governor `ACTIVE`
-  - mudança de profile
-  - bateria baixa
-- Alerta háptico triplo para bateria baixa
-- Controle opcional dos LEDs do rádio:
-  - cor configurável quando armado
-  - cor configurável quando desarmado
-  - animação na cor de desarmado em caso de `disable flag`
-- Uso das imagens do modelo a partir da pasta `/IMAGES` do cartão SD
-- Timer de voo por sessão
-- Contagem de voos por modelo
+  - profile change
+  - low battery
+- Triple haptic alert for low battery
+- Optional control of the radio LEDs:
+  - configurable colour when armed
+  - configurable colour when disarmed
+  - animation in the disarmed colour when a `disable flag` is present
+- Model images taken from the `/IMAGES` folder on the SD card
+- Per-session flight timer
+- Flight count per model
 
-## Requisitos
+## Requirements
 
-- Rádio compatível com **EdgeTX**
-- Rotorflight com telemetria CRSF funcionando
-- Cartão SD com suporte a widgets Lua
+- A radio running **EdgeTX**
+- Rotorflight with CRSF telemetry working
+- An SD card set up for Lua widgets
 
-## Instalação
+## Installation
 
-Você pode baixar a versão mais recente em `.zip` por este link:
+Download the most recent `.zip` release here:
 
-[Baixar DBK_TX16KMK3 v1.0.6 (.zip)](https://github.com/vhuzalo/DBK_TX16KMK3/releases/download/v1.0.6/DBK_TX16KMK3-v1.0.6.zip)
+[Download DBK_TX16KMK3 v1.0.6 (.zip)](https://github.com/vhuzalo/DBK_TX16KMK3/releases/download/v1.0.6/DBK_TX16KMK3-v1.0.6.zip)
 
-Depois de baixar:
+After downloading:
 
-1. Extraia o arquivo `.zip`.
-2. Copie a pasta `DBK_TX16KMK3` para o cartão SD do rádio.
+1. Extract the `.zip` file.
+2. Copy the `DBK_TX16KMK3` folder to the radio SD card.
 
-Copie o conteúdo deste projeto para a seguinte pasta do cartão SD:
+Copy the contents of this project into the following folder on the SD card:
 
 ```text
 /WIDGETS/DBK_TX16KMK3/
 ```
 
-Os arquivos principais do widget devem ficar assim:
+The main widget files should end up like this:
 
 ```text
 /WIDGETS/DBK_TX16KMK3/main.lua
 /WIDGETS/DBK_TX16KMK3/config.lua
 /WIDGETS/DBK_TX16KMK3/audio/
-/WIDGETS/DBK_TX16KMK3/Image/
+/WIDGETS/DBK_TX16KMK3/image/
 ```
 
-Para configurar o nome do piloto exibido no rodapé do widget, crie também o arquivo:
+To set the pilot name shown in the widget footer, also create this file:
 
 ```text
 /WIDGETS/DBK_TX16KMK3_config.json
 ```
 
-Depois no rádio:
+Then on the radio:
 
-1. Abra a página onde deseja usar o widget.
-2. Escolha um layout com suporte a widget em tela cheia.
-3. Selecione o widget `DBK_TX16KMK3`.
-4. Ajuste as opções conforme necessário.
+1. Open the page where you want the widget.
+2. Choose a layout that supports a full-screen widget.
+3. Select the `DBK_TX16KMK3` widget.
+4. Adjust the options as needed.
 
-### Deploy pelo computador
+### Deploying from a computer
 
-Em Linux, `deploy.sh` detecta automaticamente um cartão SD ou rádio EdgeTX
-montado em `/run/media`, `/media` ou `/mnt`:
+On Linux, `deploy.sh` automatically finds an SD card or EdgeTX radio mounted under
+`/run/media`, `/media` or `/mnt`:
 
 ```bash
 ./deploy.sh --dry-run
 ./deploy.sh
 ```
 
-Também é possível informar explicitamente a raiz que contém `WIDGETS/` e
-`IMAGES/`:
+You can also name the root that holds `WIDGETS/` and `IMAGES/` explicitly:
 
 ```bash
 ./deploy.sh /run/media/$USER/EDGETX
 ```
 
-Para instalar uma versão publicada no GitHub, use `-v`. O script apresenta os
-10 releases mais recentes, baixa o pacote da versão escolhida e o instala usando
-as mesmas regras do deploy local:
+To install a release published on GitHub, use `-v`. The script lists the 10 most recent
+releases, downloads the package for the version you pick and installs it with the same
+rules as a local deploy:
 
 ```bash
 ./deploy.sh -v
@@ -124,104 +133,99 @@ as mesmas regras do deploy local:
 ./deploy.sh -v --dry-run /run/media/$USER/EDGETX
 ```
 
-Esse modo requer `curl`, `unzip` e acesso à internet.
+That mode needs `curl`, `unzip` and internet access.
 
-O script compara os arquivos e copia somente os ausentes ou alterados. Os logs
-de voo e `/WIDGETS/DBK_TX16KMK3_config.json` existentes no rádio são sempre
-preservados.
+The script compares files and copies only what is missing or changed. Flight logs and an
+existing `/WIDGETS/DBK_TX16KMK3_config.json` on the radio are always preserved.
 
-## Imagens dos modelos
+On Windows, the VS Code task **Deploy to radio folder** runs `.vscode/deploy-radio.ps1`,
+which mirrors the widget files to the radio using `robocopy`.
 
-As imagens dos modelos agora são carregadas da pasta:
+## Model images
+
+Model images come from one place only:
 
 ```text
 /IMAGES/
 ```
 
-O nome do arquivo deve corresponder ao nome do modelo no rádio. O caractere
-inicial `>` é opcional no nome do modelo e não faz parte do nome procurado para
-a imagem.
+The widget uses the image you assign to the model in EdgeTX under **Model Setup**. Open
+the model, pick a picture in the model image field, and the widget shows it. Nothing is
+derived from the model name, so you can name your models however you like, with or
+without a leading `>`.
 
-Exemplo:
+If the model has no image assigned, or the assigned file is missing from `/IMAGES/`, the
+widget falls back to its own default picture.
 
-- Nome do modelo no rádio: `>GOOSKYRS4`
-- Arquivo da imagem: `/IMAGES/GOOSKYRS4.png`
+### Preparing images for the widget
 
-Se a imagem com o nome do modelo não for encontrada, o widget tenta a imagem
-selecionada em **Model Setup** no EdgeTX. Se ela também não estiver disponível,
-usa a imagem padrão interna.
-
-### Preparar imagens para o widget
-
-O utilitário [`tools/redimensionar_imagem_widget.py`](tools/redimensionar_imagem_widget.py)
-cria uma imagem PNG de `250x150 px`, preserva a proporção da imagem original e
-centraliza o resultado em um fundo preto. Ele requer Python 3 e a biblioteca
-Pillow:
+The [`tools/resize_model_image.py`](tools/resize_model_image.py) helper writes a
+`250x150 px` PNG, keeps the aspect ratio of the original and centres the result on a
+black background. It needs Python 3 and the Pillow library:
 
 ```bash
 python3 -m pip install Pillow
 ```
 
-Na raiz do repositório, use-o informando a imagem de origem e, opcionalmente, o
-arquivo de saída:
+From the repository root, pass it the source image and, optionally, the output file:
 
 ```bash
-python3 tools/redimensionar_imagem_widget.py foto-do-modelo.jpg /IMAGES/GOOSKYRS4.png
+python3 tools/resize_model_image.py model-photo.jpg /IMAGES/GOOSKYRS4.png
 ```
 
-Sem o segundo argumento, o arquivo é criado ao lado da imagem de origem com o
-sufixo `_dbk.png`:
+Without the second argument, the file is written next to the source image with a
+`_dbk.png` suffix:
 
 ```bash
-python3 tools/redimensionar_imagem_widget.py foto-do-modelo.jpg
+python3 tools/resize_model_image.py model-photo.jpg
 ```
 
-Para remover automaticamente o fundo antes do redimensionamento, instale também
-`rembg` e adicione `--remover-fundo`:
+To strip the background automatically before resizing, install `rembg` as well and add
+`--remove-background`:
 
 ```bash
 python3 -m pip install rembg
-python3 tools/redimensionar_imagem_widget.py foto-do-modelo.png /IMAGES/GOOSKYRS4.png --remover-fundo
+python3 tools/resize_model_image.py model-photo.png /IMAGES/GOOSKYRS4.png --remove-background
 ```
 
-Copie o PNG gerado para `/IMAGES/` no cartão SD e dê a ele o mesmo nome do
-modelo configurado no rádio, conforme os exemplos acima.
+Copy the generated PNG to `/IMAGES/` on the SD card, then assign it to the model in
+EdgeTX **Model Setup**.
 
-## Configuração do widget
+## Widget configuration
 
-O widget possui as seguintes opções:
+The widget has the following options:
 
-- `SquareColor`: cor dos textos e elementos secundários
-- `ValueColor`: cor dos valores principais
-- `DispLED`: habilita ou desabilita os LEDs do rádio
-- `ArmLED`: escolhe a cor dos LEDs quando o modelo está armado
-- `DisarmLED`: escolhe a cor dos LEDs quando o modelo está desarmado e a cor base da animação de `disable flags`
-- `UseGovernor`: habilita ou desabilita a leitura e exibição do governor
-- `HoldSwitch`: chave usada para congelar mínimos e máximos
-- `BatAlertPct`: percentual de bateria para disparo do alerta de bateria baixa
+- `SquareColor`: colour of labels and secondary elements
+- `ValueColor`: colour of the main values
+- `DispLED`: enables or disables the radio LEDs
+- `ArmLED`: LED colour while the model is armed
+- `DisarmLED`: LED colour while the model is disarmed, and the base colour of the `disable flags` animation
+- `UseGovernor`: enables or disables reading and showing the governor
+- `HoldSwitch`: switch used to freeze minimums and maximums
+- `BatAlertPct`: battery percentage that triggers the low battery alert
 
-O valor padrão inicial para `BatAlertPct` vem de `battery_alert_pct` no arquivo de configuração. Se essa chave não existir, o padrão usado é `25`.
+The initial default for `BatAlertPct` comes from `battery_alert_pct` in the configuration
+file. If that key is missing, the default is `25`.
 
-As opções `ArmLED` e `DisarmLED` oferecem vermelho, verde, azul, amarelo,
-ciano, magenta, branco, laranja, roxo e rosa. Os padrões são azul para armado
-e vermelho para desarmado. Assim como as demais opções do widget, esses valores
-são persistidos pelo próprio EdgeTX e não pelo arquivo JSON.
+`ArmLED` and `DisarmLED` offer red, green, blue, yellow, cyan, magenta, white, orange,
+purple and pink. The defaults are blue for armed and red for disarmed. Like the other
+widget options, these values are stored by EdgeTX itself, not in the JSON file.
 
-## Configuração em JSON
+## JSON configuration
 
-O widget lê configurações do arquivo:
+The widget reads settings from:
 
 ```text
 /WIDGETS/DBK_TX16KMK3_config.json
 ```
 
-Atualmente ele suporta estas chaves:
+It currently supports these keys:
 
-- `pilot_name`: nome mostrado no rodapé
-- `battery_alert_pct`: percentual padrão do alerta de bateria
-- `battery_alert_interval`: intervalo entre alertas de bateria baixa, em segundos
+- `pilot_name`: name shown in the footer
+- `battery_alert_pct`: default percentage for the battery alert
+- `battery_alert_interval`: interval between low battery alerts, in seconds
 
-Exemplo:
+Example:
 
 ```json
 {
@@ -231,7 +235,8 @@ Exemplo:
 }
 ```
 
-Se o arquivo não existir, estiver vazio, ou não trouxer alguma dessas chaves, o widget usa os seguintes padrões:
+If the file is missing, empty, or does not carry one of these keys, the widget uses these
+defaults:
 
 ```text
 pilot_name = Rotorflight
@@ -239,44 +244,56 @@ battery_alert_pct = 25
 battery_alert_interval = 10
 ```
 
-Na inicialização, se `/WIDGETS/DBK_TX16KMK3_config.json` não existir ou estiver vazio, o próprio widget tenta criar esse arquivo automaticamente com os valores padrão.
+At startup, if `/WIDGETS/DBK_TX16KMK3_config.json` is missing or empty, the widget tries
+to create it automatically with the default values.
 
-## Novidades da v1.0.6
+## Changes in this fork
 
-- imagens de modelo localizadas com ou sem o prefixo `>` no nome
-- fallback para a imagem configurada no Model Setup do EdgeTX antes da imagem padrão
-- cores configuráveis para os LEDs nos estados armado e desarmado
-- animação de `disable flags` usando a cor escolhida para desarmado
-- novos caches de geometria, displays, cores, cronômetros e animações para reduzir o uso de CPU
-- novo modo `deploy.sh -v` para escolher e instalar uma das versões publicadas no GitHub
+- Model images come only from the image assigned in EdgeTX **Model Setup**. The lookup
+  derived from the model name is gone, so the `>` naming convention no longer matters and
+  the `modelImage/` folder has been removed.
+- Everything in the repository is in English: comments, scripts, release notes and docs.
+- Runtime images live in `image/`, matching the lowercase path `main.lua` actually opens.
+  Documentation screenshots live in `doc/images/` and are no longer shipped to the radio.
+- Compiled `.luac` artifacts are ignored, so a stale one cannot shadow an updated
+  `main.lua`.
 
-## Novidades da v1.0.5
+## What's new in v1.0.6
 
-- reduzido o uso de memória e a criação de tabelas temporárias durante o desenho
-- removida a coleta de curvas que estava marcada como desativada
-- recarga do JSON reduzida para uma vez por minuto e debug limitado à inicialização
-- renderização limitada a 10 FPS e geometria dos medidores reutilizada entre frames
-- corrigido o comportamento de tela cheia acionado pelo toque no EdgeTX
-- adicionado `deploy.sh` seguro, com detecção automática e modo `--dry-run`
+- model images found with or without the `>` prefix in the name
+- fallback to the image configured in EdgeTX Model Setup before the default image
+- configurable LED colours for the armed and disarmed states
+- `disable flags` animation using the colour chosen for disarmed
+- new caches for geometry, displays, colours, timers and animations, to reduce CPU use
+- new `deploy.sh -v` mode to pick and install one of the releases published on GitHub
 
-## Novidades da v1.0.3
+## What's new in v1.0.5
 
-- corrigido o alerta de bateria baixa para respeitar o valor persistido em `BatAlertPct` nas opções do widget
-- removida a sobrescrita em runtime do percentual de alerta a partir do JSON, evitando que o aviso continuasse disparando com valor antigo
+- reduced memory use and temporary table creation while drawing
+- removed the curve collection that was already marked as disabled
+- JSON reload cut to once per minute, and debug output limited to startup
+- rendering limited to 10 FPS, with gauge geometry reused between frames
+- fixed the full-screen behaviour triggered by touching the EdgeTX screen
+- added a safe `deploy.sh`, with automatic detection and a `--dry-run` mode
 
-## Novidades da v1.0.2
+## What's new in v1.0.3
 
-- `BatAlertPct` passou a usar entrada numérica para facilitar ajuste pelo scroller
-- nome do piloto saiu da configuração do widget e foi movido para arquivo JSON no SD
-- novo arquivo `/WIDGETS/DBK_TX16KMK3_config.json` para configurações persistentes fora da pasta do widget
-- suporte às chaves `pilot_name`, `battery_alert_pct` e `battery_alert_interval`
-- criação automática do arquivo de configuração com valores padrão quando ele não existir ou estiver vazio
-- recarga dinâmica da configuração em tempo de execução
-- extração da lógica de configuração para `config.lua`, deixando o `main.lua` mais limpo
+- fixed the low battery alert so it respects the value stored in `BatAlertPct` in the widget options
+- removed the runtime overwrite of the alert percentage from the JSON, which kept the warning firing on an old value
 
-## Telemetria esperada
+## What's new in v1.0.2
 
-O widget foi preparado para trabalhar com sensores Rotorflight/CRSF como:
+- `BatAlertPct` switched to a numeric input, easier to adjust with the scroller
+- pilot name moved out of the widget options and into a JSON file on the SD card
+- new `/WIDGETS/DBK_TX16KMK3_config.json` file for settings that persist outside the widget folder
+- support for the `pilot_name`, `battery_alert_pct` and `battery_alert_interval` keys
+- the configuration file is created automatically with default values when missing or empty
+- configuration reloaded at runtime
+- configuration logic extracted into `config.lua`, leaving `main.lua` cleaner
+
+## Expected telemetry
+
+The widget is built to work with Rotorflight/CRSF sensors such as:
 
 - `Vbat`
 - `Curr`
@@ -294,64 +311,95 @@ O widget foi preparado para trabalhar com sensores Rotorflight/CRSF como:
 - `PID#`
 - `ARMD`
 
-Uma forma simples de habilitar todos os sensores necessários é executar este comando no CLI:
+The simplest way to enable all the sensors it needs is to run this command in the CLI:
 
 ```text
 set telemetry_sensors = 3,4,5,6,7,8,43,50,60,88,90,91,99,95,96,15,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
 ```
 
-## Alertas e comportamento
+## Alerts and behaviour
 
-### Timer de voo
+### Flight timer
 
-O campo `Time` mostra o tempo do voo atual.
+The `Time` field shows the duration of the current flight.
 
-- o timer começa a contar quando o modelo entra em estado armado
-- o timer para quando o modelo é desarmado
-- ele representa o tempo da sessão de voo atual, não um acumulado total do rádio
+- the timer starts counting when the model becomes armed
+- the timer stops when the model is disarmed
+- it represents the current flight session, not a running total for the radio
 
-Isso permite usar o timer como referência rápida do voo em andamento, especialmente para gerenciamento de bateria.
+That makes it a quick reference for the flight in progress, which is mostly useful for
+battery management.
 
-### Contagem de voos por modelo
+### Flight count per model
 
-O campo `Flight` mostra dois contadores:
+The `Flight` field shows two counters:
 
-- o valor da esquerda representa o total acumulado de voos daquele modelo no rádio
-- o valor da direita representa a quantidade de voos registrada para o modelo no contexto atual exibido pelo widget
+- the left value is the accumulated total of flights for that model on the radio
+- the right value is the number of flights recorded for the model in the context the widget is currently showing
 
-Na prática, a contagem é feita por modelo, então cada aeronave mantém seu próprio histórico separado.
+Counting is per model, so each aircraft keeps its own separate history.
 
-Um novo voo só é contabilizado quando há um ciclo válido de voo, evitando contagens indevidas em arm/desarm muito curtos.
+A new flight is only counted on a valid flight cycle, which avoids miscounts from very
+short arm and disarm cycles.
 
-### ARM e disable flags
+### ARM and disable flags
 
-- Quando houver `disable flags`, o texto de bloqueio tem prioridade sobre `ARMED`
-- O campo usa a mesma área visual do status de arm
-- `disable flags` aparecem em vermelho
-- `ARMED` aparece em amarelo
+- When `disable flags` are present, the lock text takes priority over `ARMED`
+- The field uses the same screen area as the arm status
+- `disable flags` appear in red
+- `ARMED` appears in yellow
 
 ### Governor
 
-O estado do governor pode ser obtido:
+The governor state can come from:
 
-- diretamente do sensor `Gov`, quando disponível
-- ou inferido a partir do throttle, seguindo a lógica já usada no RFMONO
+- the `Gov` sensor directly, when available
+- or be inferred from the throttle, following the logic already used in RFMONO
 
-Se a opção `UseGovernor` estiver desabilitada nas configurações do widget, o script deixa de ler o governor e também desativa sua exibição e os áudios relacionados.
+If `UseGovernor` is disabled in the widget settings, the script stops reading the
+governor and also turns off its display and the related audio.
 
-### Bateria baixa
+### Low battery
 
-Quando a bateria atinge o percentual configurado:
+When the battery reaches the configured percentage:
 
-- o widget toca o áudio de alerta
-- dispara 3 pulsos de haptic
+- the widget plays the alert audio
+- it fires 3 haptic pulses
 
-## Observações
+## Troubleshooting
 
-- Este projeto é voltado para **EdgeTX**, não Ethos
-- A pasta `.vscode/` não faz parte da instalação no rádio
-- A pasta `modelImage/` deixou de ser a origem principal das imagens dos modelos
+### The flight controller is not detected when flashing
 
-## Versão
+If your PC does not see the flight controller in DFU mode while you flash Rotorflight,
+this is almost always a Windows STM32 driver problem rather than a fault on the board.
+The **ImpulseRC Driver Fixer** is the usual tool for it: run it, then plug the board in
+while it waits, and it installs the correct DFU driver.
 
-Versão atual do widget: **v1.0.6**
+Download it from the ImpulseRC downloads page: <https://impulserc.com/pages/downloads>
+
+That executable used to be committed to this repository. It has been removed, because
+shipping a third-party Windows binary inside a Lua widget repository is a bad idea:
+nobody can tell which version it is or whether it has been tampered with. Get it from
+the vendor instead.
+
+### The widget shows the default picture instead of my model image
+
+Check, in order:
+
+1. The model has an image assigned in EdgeTX **Model Setup**.
+2. That file actually exists in `/IMAGES/` on the SD card.
+3. The image is in a format EdgeTX can open. Use `tools/resize_model_image.py` to produce
+   a known-good `250x150 px` PNG.
+
+The widget no longer looks for an image matching the model name, so renaming a model has
+no effect here.
+
+## Notes
+
+- This project targets **EdgeTX**, not Ethos
+- The `.vscode/`, `doc/`, `tools/` and `release-notes/` folders are not part of the radio installation
+- The `image/` folder holds the pictures the widget draws; `doc/images/` holds documentation screenshots only
+
+## Version
+
+Current widget version: **v1.0.6**. This fork is based on that release.
