@@ -32,7 +32,6 @@ jobs:
 
           cp main.lua "${PACKAGE_ROOT}/"
           cp config.lua "${PACKAGE_ROOT}/"
-          cp deploy.sh "${PACKAGE_ROOT}/"
           cp README.md "${PACKAGE_ROOT}/"
           cp SettingScript.txt "${PACKAGE_ROOT}/"
           cp -R audio "${PACKAGE_ROOT}/"

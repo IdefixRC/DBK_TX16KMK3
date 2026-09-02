@@ -109,37 +109,11 @@ Then on the radio:
 
 ### Deploying from a computer
 
-On Linux, `deploy.sh` automatically finds an SD card or EdgeTX radio mounted under
-`/run/media`, `/media` or `/mnt`:
-
-```bash
-./deploy.sh --dry-run
-./deploy.sh
-```
-
-You can also name the root that holds `WIDGETS/` and `IMAGES/` explicitly:
-
-```bash
-./deploy.sh /run/media/$USER/EDGETX
-```
-
-To install a release published on GitHub, use `-v`. The script lists the 10 most recent
-releases, downloads the package for the version you pick and installs it with the same
-rules as a local deploy:
-
-```bash
-./deploy.sh -v
-./deploy.sh -v /run/media/$USER/EDGETX
-./deploy.sh -v --dry-run /run/media/$USER/EDGETX
-```
-
-That mode needs `curl`, `unzip` and internet access.
-
-The script compares files and copies only what is missing or changed. Flight logs and an
-existing `/WIDGETS/DBK_TX16KMK3_config.json` on the radio are always preserved.
-
 On Windows, the VS Code task **Deploy to radio folder** runs `.vscode/deploy-radio.ps1`,
 which mirrors the widget files to the radio using `robocopy`.
+
+Otherwise copy the files onto the SD card by hand, as described above. Installing this
+widget is a file copy, and the project keeps it that way.
 
 ## Model images
 
@@ -257,6 +231,9 @@ to create it automatically with the default values.
   Documentation screenshots live in `doc/images/` and are no longer shipped to the radio.
 - Compiled `.luac` artifacts are ignored, so a stale one cannot shadow an updated
   `main.lua`.
+- The `deploy.sh` installer is gone. Installing the widget means copying files to the SD
+  card, and a 290 line shell script that probes mount points and downloads GitHub
+  releases is more machinery than a file copy needs.
 
 ## What's new in v1.0.6
 
@@ -265,7 +242,6 @@ to create it automatically with the default values.
 - configurable LED colours for the armed and disarmed states
 - `disable flags` animation using the colour chosen for disarmed
 - new caches for geometry, displays, colours, timers and animations, to reduce CPU use
-- new `deploy.sh -v` mode to pick and install one of the releases published on GitHub
 
 ## What's new in v1.0.5
 
@@ -274,7 +250,6 @@ to create it automatically with the default values.
 - JSON reload cut to once per minute, and debug output limited to startup
 - rendering limited to 10 FPS, with gauge geometry reused between frames
 - fixed the full-screen behaviour triggered by touching the EdgeTX screen
-- added a safe `deploy.sh`, with automatic detection and a `--dry-run` mode
 
 ## What's new in v1.0.3
 
