@@ -263,7 +263,3 @@ no effect here.
 - This project targets **EdgeTX**, not Ethos
 - The `doc/` folder is documentation only and is not part of the radio installation
 - The `image/` folder holds the pictures the widget draws; `doc/images/` holds documentation screenshots only
-
-## Version
-
-Current widget version: **v1.0.7**.
