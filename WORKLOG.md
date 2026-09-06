@@ -118,9 +118,9 @@ looks pointless now: its payoff moved off-device.
   the cache would never populate and `refresh` would throw. Now unreachable in practice
   because the resolver guarantees numbers, but the cache logic itself is still fragile.
 
-- **The test harness was not committed.** Roughly 200 lines, would live under `tools/`.
-  The release workflow only copies `main.lua`, `SettingScript.txt`, `audio`, `image` and
-  `logs`, so it would not reach the SD card package.
+- ~~The test harness was not committed.~~ Done: it lives in `tools/`, with its own
+  README. `tools/` is gitignored, so it stays on this machine and out of the SD card
+  package. It has no off-machine backup as a result.
 
 - **No `CLAUDE.md` in this repo yet.** The workspace-level one at `D:\02_GitHub\CLAUDE.md`
   covers it, but a per-repo file describing the widget and its constraints does not exist.

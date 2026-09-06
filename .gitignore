@@ -11,3 +11,6 @@ dist/
 
 # Local AI agent instructions, not shared
 AGENTS.md
+
+# Local test harness, not part of the SD card package
+tools/
