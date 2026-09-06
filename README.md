@@ -137,19 +137,10 @@ purple and pink. The defaults are blue for armed and red for disarmed.
 Every setting lives in the widget options and is stored by EdgeTX itself. There is no
 configuration file to create or edit.
 
-**Upgrading:** EdgeTX stores widget option values by their position in this list, not by
-their name. This release reorders the list, so settings saved by an earlier version no
-longer line up.
-
-The widget detects this. `Pilot Name` is the first option and the only text one, so if it
-reads back as anything other than text the stored values must belong to the old order.
-When that happens the widget ignores all of them and runs on the defaults listed above,
-so it looks and behaves exactly as a freshly installed one.
-
-The settings screen is EdgeTX's own and still shows the stale values until you save them:
-a widget cannot rewrite its own options. Open the widget settings once per model and save
-your values, and both the screen and the widget agree from then on. Deleting the widget
-and adding it again also works, and starts the settings screen from the defaults.
+**Upgrading from versions <1.0.8 or other repos:** As EdgeTX prevents migration of
+settings, please open the widget settings once per model, update all values and save
+before your first flight. This will ensure all values are rewritten and correctly
+stored.
 
 `Pilot Name` is an EdgeTX text option, so it is limited to 12 characters. Leave it empty
 to fall back to `Rotorflight`.
