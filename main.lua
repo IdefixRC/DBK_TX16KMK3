@@ -80,8 +80,8 @@ local DIGIT_SEGMENTS = {
 local tg_pic_obj
 local bg_pic_obj
 local default_pic_obj
-local tg_pic_x, tg_pic_y = MODEL_IMAGE_X, MODEL_IMAGE_Y
-local default_pic_x, default_pic_y = MODEL_IMAGE_X, MODEL_IMAGE_Y
+local tg_pic_x, tg_pic_y, tg_pic_scale = MODEL_IMAGE_X, MODEL_IMAGE_Y, nil
+local default_pic_x, default_pic_y, default_pic_scale = MODEL_IMAGE_X, MODEL_IMAGE_Y, nil
 local hold1_pic_obj
 local hold2_pic_obj
 local runtime_cache = {
@@ -297,45 +297,46 @@ local function resolve_model_image_path(model_info)
     return nil
 end
 
--- A model picture is whatever file the pilot assigned in Model Setup, at whatever
--- size that file happens to be, and lcd.drawBitmap has no fitting of its own: an
--- oversized image was drawn 1:1 from the top-left of the panel and ran over the
--- governor row and the model name. Scale it into the panel preserving aspect ratio
--- and centre the result. This runs when the model changes, never per frame.
+-- A model picture is whatever file the pilot assigned in Model Setup, at whatever size
+-- that file happens to be, and lcd.drawBitmap does no fitting of its own: an oversized
+-- image was drawn 1:1 from the top left of the panel and ran over the governor row and
+-- the model name.
 --
--- Bitmap.getSize and Bitmap.resize are checked rather than assumed; if either is
--- missing the image is drawn unscaled, which is the old behaviour.
+-- Fit it by passing a scale percentage to lcd.drawBitmap rather than by building a
+-- resized copy with Bitmap.resize. Resize was tried first and produced fringes of
+-- artefacts along the edges of the drawn image on the radio, at every combination of
+-- dimensions, including ones aligned to four pixels. Scaling at draw time leaves the
+-- loaded bitmap untouched, allocates nothing, and the blitter handles the sampling.
+--
+-- Returns the bitmap, where to draw it, and the scale percentage, or nil for images that
+-- already fit, so those take exactly the same path as before any scaling existed.
 local function fit_model_image(bitmap)
     if not bitmap then
-        return nil, MODEL_IMAGE_X, MODEL_IMAGE_Y
+        return nil, MODEL_IMAGE_X, MODEL_IMAGE_Y, nil
     end
-    if type(Bitmap) ~= "table" or type(Bitmap.getSize) ~= "function"
-        or type(Bitmap.resize) ~= "function" then
-        return bitmap, MODEL_IMAGE_X, MODEL_IMAGE_Y
+    if type(Bitmap) ~= "table" or type(Bitmap.getSize) ~= "function" then
+        return bitmap, MODEL_IMAGE_X, MODEL_IMAGE_Y, nil
     end
 
     local width, height = Bitmap.getSize(bitmap)
     if type(width) ~= "number" or type(height) ~= "number"
         or width <= 0 or height <= 0 then
-        return bitmap, MODEL_IMAGE_X, MODEL_IMAGE_Y
+        return bitmap, MODEL_IMAGE_X, MODEL_IMAGE_Y, nil
     end
 
-    local scale = m_min(MODEL_IMAGE_W / width, MODEL_IMAGE_H / height)
-    local target_w = m_max(1, m_floor(width * scale + 0.5))
-    local target_h = m_max(1, m_floor(height * scale + 0.5))
-
-    local fitted = bitmap
-    if target_w ~= width or target_h ~= height then
-        fitted = Bitmap.resize(bitmap, target_w, target_h)
-        if not fitted then
-            -- resize failed, centre what we actually have
-            fitted, target_w, target_h = bitmap, width, height
-        end
+    -- floored, so rounding can only ever leave the image inside the panel
+    local percent = m_floor(m_min(MODEL_IMAGE_W / width, MODEL_IMAGE_H / height) * 100)
+    if percent < 1 then
+        percent = 1
     end
 
-    return fitted,
-        MODEL_IMAGE_X + m_floor((MODEL_IMAGE_W - target_w) / 2),
-        MODEL_IMAGE_Y + m_floor((MODEL_IMAGE_H - target_h) / 2)
+    local drawn_w = m_floor(width * percent / 100)
+    local drawn_h = m_floor(height * percent / 100)
+
+    return bitmap,
+        MODEL_IMAGE_X + m_floor((MODEL_IMAGE_W - drawn_w) / 2),
+        MODEL_IMAGE_Y + m_floor((MODEL_IMAGE_H - drawn_h) / 2),
+        percent ~= 100 and percent or nil
 end
 
 local function build_date_stamp(date_time)
@@ -620,7 +621,7 @@ local function create(zone, options)
         fly_number = 1
         log_data[1] = "01|12:34:56|05:30|1850|025|2400|125.5|03500|25.2|22.8|+055|+025|+040|+020|-032|-072|-028|-065|100|095|080|12.6|11.8\n"
     end
-    default_pic_obj, default_pic_x, default_pic_y =
+    default_pic_obj, default_pic_x, default_pic_y, default_pic_scale =
         fit_model_image(Bitmap.open(IMAGE_ROOT .. "/default.png"))
     hold1_pic_obj = Bitmap.open(IMAGE_ROOT .. "/hold1.png")
     hold2_pic_obj = Bitmap.open(IMAGE_ROOT .. "/hold2.png")
@@ -1363,10 +1364,21 @@ local function refresh(widget, event, touchState)
     local model_info = frame_cache.model_info
     local model_name = model_info.name or ""
     d_text(720, 414, model_name, RIGHT + MIDSIZE + value_color)
+    -- An image that already fits is drawn with three arguments, exactly as before any
+    -- scaling existed. Passing an explicit nil scale would reach lcd.drawBitmap as a
+    -- fourth argument, and not every EdgeTX build treats that as "absent".
     if tg_pic_obj then
-        d_bitmap(tg_pic_obj, tg_pic_x, tg_pic_y)
+        if tg_pic_scale then
+            d_bitmap(tg_pic_obj, tg_pic_x, tg_pic_y, tg_pic_scale)
+        else
+            d_bitmap(tg_pic_obj, tg_pic_x, tg_pic_y)
+        end
     elseif default_pic_obj then
-        d_bitmap(default_pic_obj, default_pic_x, default_pic_y)
+        if default_pic_scale then
+            d_bitmap(default_pic_obj, default_pic_x, default_pic_y, default_pic_scale)
+        else
+            d_bitmap(default_pic_obj, default_pic_x, default_pic_y)
+        end
     end
     local tx_voltage = getValue("tx-voltage") or getValue("TxBt") or 0
     if tx_voltage ~= frame_cache.tx_voltage then
@@ -1425,7 +1437,7 @@ local function refresh(widget, event, touchState)
         runtime_cache.model_bitmap = current_model_bitmap
         runtime_cache.pic_path = resolve_model_image_path(model_info) or ""
         if runtime_cache.pic_path ~= "" then
-            tg_pic_obj, tg_pic_x, tg_pic_y =
+            tg_pic_obj, tg_pic_x, tg_pic_y, tg_pic_scale =
                 fit_model_image(Bitmap.open(runtime_cache.pic_path))
         else
             tg_pic_obj = nil
