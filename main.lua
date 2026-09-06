@@ -187,17 +187,19 @@ local ARM_DISABLE_FLAG_NAMES = {
     [25] = "ARM SWITCH"
 }
 
+-- EdgeTX stores widget option values by position, not by name, so these labels
+-- can be reworded freely as long as the order and the types below stay put.
 local options = {
-    { "SquareColor", COLOR, WHITE },
-    { "ValueColor", COLOR, GREEN },
-    { "DispLED", BOOL, 0 },
-    { "ArmLED", CHOICE, 3, LED_COLOR_NAMES },
-    { "DisarmLED", CHOICE, 1, LED_COLOR_NAMES },
-    { "UseGovernor", BOOL, 1 },
-    { "HoldSwitch", SWITCH, 0 },
-    { "BatAlertPct", VALUE, DEFAULT_BATTERY_ALERT_PCT, 0, 100 },
-    { "AlertIntvl", VALUE, DEFAULT_BATTERY_ALERT_INTERVAL, 1, 120 },
-    { "PilotName", STRING, DEFAULT_PILOT_NAME }
+    { "Text Color", COLOR, WHITE },
+    { "Value Color", COLOR, GREEN },
+    { "Enable LEDs", BOOL, 0 },
+    { "LED Armed", CHOICE, 3, LED_COLOR_NAMES },
+    { "LED Disarmed", CHOICE, 1, LED_COLOR_NAMES },
+    { "Show Governor", BOOL, 1 },
+    { "Arm Switch", SWITCH, 0 },
+    { "Low Batt %", VALUE, DEFAULT_BATTERY_ALERT_PCT, 0, 100 },
+    { "Alert Every s", VALUE, DEFAULT_BATTERY_ALERT_INTERVAL, 1, 120 },
+    { "Pilot Name", STRING, DEFAULT_PILOT_NAME }
 }
 local function build_default_log_info()
     return s_format("%d", getDateTime().year) .. '/' ..
@@ -340,14 +342,14 @@ local function update_led_strip(widget, is_armed, has_disable_flags)
         return
     end
 
-    local armed_color_index = m_floor(tonumber(widget.options.ArmLED) or 3)
-    local disarmed_color_index = m_floor(tonumber(widget.options.DisarmLED) or 1)
+    local armed_color_index = m_floor(tonumber(widget.options["LED Armed"]) or 3)
+    local disarmed_color_index = m_floor(tonumber(widget.options["LED Disarmed"]) or 1)
     if not LED_COLORS[armed_color_index] then armed_color_index = 3 end
     if not LED_COLORS[disarmed_color_index] then disarmed_color_index = 1 end
     local armed_color = LED_COLORS[armed_color_index]
     local disarmed_color = LED_COLORS[disarmed_color_index]
 
-    if widget.options.DispLED ~= 1 then
+    if widget.options["Enable LEDs"] ~= 1 then
         if led_cache.mode ~= "OFF" then
             led_cache.mode = "OFF"
             led_cache.phase = -1
@@ -551,8 +553,8 @@ local function get_widget_colors(widget)
         cache = {}
         widget.color_cache = cache
     end
-    local square_option = widget.options.SquareColor
-    local value_option = widget.options.ValueColor
+    local square_option = widget.options["Text Color"]
+    local value_option = widget.options["Value Color"]
     if cache.square_option ~= square_option or cache.value_option ~= value_option then
         lcd.setColor(CUSTOM_COLOR, square_option)
         cache.square_color = lcd.getColor(CUSTOM_COLOR)
@@ -570,7 +572,7 @@ end
 
 local pilot_name_cache = { option = nil, value = DEFAULT_PILOT_NAME }
 local function get_pilot_name(widget)
-    local pilot_name = widget and widget.options and widget.options.PilotName
+    local pilot_name = widget and widget.options and widget.options["Pilot Name"]
     if type(pilot_name) ~= "string" then
         return DEFAULT_PILOT_NAME
     end
@@ -587,7 +589,7 @@ local function get_pilot_name(widget)
 end
 
 local function get_battery_alert_interval(widget)
-    local interval = tonumber(widget and widget.options and widget.options.AlertIntvl)
+    local interval = tonumber(widget and widget.options and widget.options["Alert Every s"])
     if not interval or interval < 1 then
         return DEFAULT_BATTERY_ALERT_INTERVAL
     end
@@ -595,7 +597,7 @@ local function get_battery_alert_interval(widget)
 end
 
 local function get_battery_alert_threshold(widget)
-    local threshold = tonumber(widget.options.BatAlertPct) or 0
+    local threshold = tonumber(widget.options["Low Batt %"]) or 0
     if threshold < 0 then
         return 0
     end
@@ -700,7 +702,7 @@ local function update_governor_audio(gov_text, has_governor_state)
 end
 
 local function is_governor_enabled(widget)
-    return not widget or widget.options.UseGovernor ~= 0
+    return not widget or widget.options["Show Governor"] ~= 0
 end
 
 local function update_low_battery_alert(widget, battery_percent, is_armed, has_battery_percent, now)
@@ -1370,8 +1372,8 @@ local function refresh(widget, event, touchState)
         session_flight_count = 0
     end
     local hold_active = false
-    if widget.options.HoldSwitch ~= 0 then
-        local switch_value = getSwitchValue(widget.options.HoldSwitch)
+    if widget.options["Arm Switch"] ~= 0 then
+        local switch_value = getSwitchValue(widget.options["Arm Switch"])
         if switch_value and switch_value ~= 0 and switch_value ~= false then
             hold_active = true
         else

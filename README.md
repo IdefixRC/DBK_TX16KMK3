@@ -119,25 +119,37 @@ widget falls back to its own default picture.
 
 The widget has the following options:
 
-- `SquareColor`: colour of labels and secondary elements
-- `ValueColor`: colour of the main values
-- `DispLED`: enables or disables the radio LEDs
-- `ArmLED`: LED colour while the model is armed
-- `DisarmLED`: LED colour while the model is disarmed, and the base colour of the `disable flags` animation
-- `UseGovernor`: enables or disables reading and showing the governor
-- `HoldSwitch`: switch used to freeze minimums and maximums
-- `BatAlertPct`: battery percentage that triggers the low battery alert, default `25`
-- `AlertIntvl`: seconds between repeated low battery alerts, default `10`
-- `PilotName`: name shown in the footer, default `Rotorflight`
+- `Text Color`: colour of labels and secondary elements
+- `Value Color`: colour of the main values
+- `Enable LEDs`: enables or disables the radio LEDs
+- `LED Armed`: LED colour while the model is armed
+- `LED Disarmed`: LED colour while the model is disarmed, and the base colour of the `disable flags` animation
+- `Show Governor`: enables or disables reading and showing the governor
+- `Arm Switch`: switch that pauses the minimums and maximums recorded in the flight log, see below
+- `Low Batt %`: battery percentage that triggers the low battery alert, default `25`
+- `Alert Every s`: seconds between repeated low battery alerts, default `10`
+- `Pilot Name`: name shown in the footer, default `Rotorflight`
 
-`ArmLED` and `DisarmLED` offer red, green, blue, yellow, cyan, magenta, white, orange,
+`LED Armed` and `LED Disarmed` offer red, green, blue, yellow, cyan, magenta, white, orange,
 purple and pink. The defaults are blue for armed and red for disarmed.
 
 Every setting lives in the widget options and is stored by EdgeTX itself. There is no
 configuration file to create or edit.
 
-`PilotName` is an EdgeTX text option, so it is limited to 12 characters. Leave it empty
+`Pilot Name` is an EdgeTX text option, so it is limited to 12 characters. Leave it empty
 to fall back to `Rotorflight`.
+
+### Arm Switch
+
+The widget reads the armed state from the `ARM` telemetry sensor, not from this option.
+`Arm Switch` does one thing: while the assigned switch is active, the widget stops
+updating the per-flight minimums and maximums that go into the flight log, and the
+padlock at the top left turns red.
+
+Nothing on the display freezes. The live values keep updating, and the peak current ring
+around the current gauge keeps climbing. Only the minimum and maximum columns written to
+the log file when you disarm are affected. Leave the option unassigned to record the
+whole flight.
 
 ## Changes in this fork
 
@@ -221,7 +233,7 @@ The governor state can come from:
 - the `Gov` sensor directly, when available
 - or be inferred from the throttle, following the logic already used in RFMONO
 
-If `UseGovernor` is disabled in the widget settings, the script stops reading the
+If `Show Governor` is disabled in the widget settings, the script stops reading the
 governor and also turns off its display and the related audio.
 
 ### Low battery
