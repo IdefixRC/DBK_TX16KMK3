@@ -30,8 +30,14 @@ local crsf_field = { "Vbat", "Curr", "Hspd", "Capa", "Bat%", "Tesc", "Tmcu", "1R
 local TELE_ITEMS = #crsf_field
 local LOG_INFO_LEN = 22
 local LOG_DATA_LEN = 115
-local value_min_max = {}
-local field_id = {}
+-- Telemetry state as five flat arrays rather than 36 nested tables. Same
+-- indices as before (1..TELE_ITEMS, matching crsf_field), one lookup per
+-- access instead of two, and 36 fewer table headers on the heap.
+local tele_cur = {}
+local tele_max = {}
+local tele_min = {}
+local field_ids = {}
+local field_ok = {}
 local bank_info = { current = 1, name = "Bank 1" }
 
 -- Immutable drawing lookup tables. Keeping these outside refresh-time functions
@@ -80,6 +86,40 @@ local runtime_cache = {
     daily_flight_count = 0
 }
 local telemetry_initialized = false
+
+-- Values that are re-read once per RTC second rather than once per frame.
+-- getDateTime() and model.getInfo() each allocate a fresh table on every call;
+-- none of these are telemetry, so refreshing them on the second boundary keeps
+-- them accurate to within one frame while removing 20 allocations per second.
+local frame_cache = {
+    rtc_second = -1,
+    date_time = nil,
+    model_info = nil,
+    date_stamp = "",
+    tx_voltage = nil,
+    tx_text = "",
+    rqly_value = nil,
+    rqly_text = ""
+}
+
+-- lcd.RGB() cannot be called at load time, so the constant colours that used to
+-- be rebuilt on every frame are built once on the first refresh instead.
+local COLORS
+local function ensure_colors()
+    if not COLORS then
+        COLORS = {
+            gray80 = lcd.RGB(80, 80, 80),
+            bank1  = lcd.RGB(0, 100, 255),
+            bank2  = lcd.RGB(255, 165, 0),
+            bank3  = lcd.RGB(255, 255, 0),
+            bar4   = lcd.RGB(173, 255, 47),
+            bar5   = lcd.RGB(0, 255, 0)
+        }
+    end
+    return COLORS
+end
+local BANK_LABELS = { "1", "2", "3", "4", "5", "6", "7", "8", "9" }
+local led_api_ok
 
 -- Log and flight counters
 local model_index_file = SYSTEM_LOG_ROOT .. "/model_index.txt"
@@ -159,7 +199,6 @@ local options = {
     { "AlertIntvl", VALUE, DEFAULT_BATTERY_ALERT_INTERVAL, 1, 120 },
     { "PilotName", STRING, DEFAULT_PILOT_NAME }
 }
-local radioH = 0
 local function build_default_log_info()
     return s_format("%d", getDateTime().year) .. '/' ..
         s_format("%02d", getDateTime().mon) .. '/' ..
@@ -243,6 +282,7 @@ local function scale_led_color(color, factor, minimum)
     return scaled_color
 end
 
+local LED_TRAIL_INTENSITIES = { 1, 0.88, 0.69, 0.50, 0.31, 0.19 }
 local function get_led_trail(color_index, base_color)
     local cached = led_cache.trails[color_index]
     if cached then
@@ -250,9 +290,8 @@ local function get_led_trail(color_index, base_color)
     end
 
     cached = { colors = {} }
-    local intensities = { 1, 0.88, 0.69, 0.50, 0.31, 0.19 }
-    for i = 1, #intensities do
-        cached.colors[i] = scale_led_color(base_color, intensities[i])
+    for i = 1, #LED_TRAIL_INTENSITIES do
+        cached.colors[i] = scale_led_color(base_color, LED_TRAIL_INTENSITIES[i])
     end
     cached.background = scale_led_color(base_color, 0.03, 1)
     led_cache.trails[color_index] = cached
@@ -293,8 +332,11 @@ local function set_led_strip_circulating(phase, base_color, color_index)
 end
 
 local function update_led_strip(widget, is_armed, has_disable_flags)
-    if type(LED_STRIP_LENGTH) ~= "number" or LED_STRIP_LENGTH <= 0
-        or type(setRGBLedColor) ~= "function" or type(applyRGBLedColors) ~= "function" then
+    if led_api_ok == nil then
+        led_api_ok = type(LED_STRIP_LENGTH) == "number" and LED_STRIP_LENGTH > 0
+            and type(setRGBLedColor) == "function" and type(applyRGBLedColors) == "function"
+    end
+    if not led_api_ok then
         return
     end
 
@@ -398,8 +440,11 @@ local function create(zone, options)
         color_cache = {}
     }
     for i = 1, TELE_ITEMS do
-        value_min_max[i] = { 0, 0, 0 }
-        field_id[i] = { 0, false }
+        tele_cur[i] = 0
+        tele_max[i] = 0
+        tele_min[i] = 0
+        field_ids[i] = 0
+        field_ok[i] = false
     end
     runtime_cache.model_name = ""
     runtime_cache.model_bitmap = ""
@@ -416,11 +461,11 @@ local function create(zone, options)
     for k, v in pairs(crsf_field) do
         local field_info = getFieldInfo(v)
         if field_info ~= nil then
-            field_id[k][1] = field_info.id
-            field_id[k][2] = true
+            field_ids[k] = field_info.id
+            field_ok[k] = true
         else
-            field_id[k][1] = 0
-            field_id[k][2] = false
+            field_ids[k] = 0
+            field_ok[k] = false
         end
     end
     for i = 1, #second do
@@ -523,16 +568,22 @@ local function get_widget_colors(widget)
     return cache.bg_color, cache.square_color, cache.value_color
 end
 
+local pilot_name_cache = { option = nil, value = DEFAULT_PILOT_NAME }
 local function get_pilot_name(widget)
     local pilot_name = widget and widget.options and widget.options.PilotName
     if type(pilot_name) ~= "string" then
         return DEFAULT_PILOT_NAME
     end
-    pilot_name = s_gsub(pilot_name, "^%s*(.-)%s*$", "%1")
-    if pilot_name == "" then
-        return DEFAULT_PILOT_NAME
+    if pilot_name == pilot_name_cache.option then
+        return pilot_name_cache.value
     end
-    return pilot_name
+    local trimmed = s_gsub(pilot_name, "^%s*(.-)%s*$", "%1")
+    if trimmed == "" then
+        trimmed = DEFAULT_PILOT_NAME
+    end
+    pilot_name_cache.option = pilot_name
+    pilot_name_cache.value = trimmed
+    return trimmed
 end
 
 local function get_battery_alert_interval(widget)
@@ -652,13 +703,13 @@ local function is_governor_enabled(widget)
     return not widget or widget.options.UseGovernor ~= 0
 end
 
-local function update_low_battery_alert(widget, battery_percent, is_armed, has_battery_percent)
+local function update_low_battery_alert(widget, battery_percent, is_armed, has_battery_percent, now)
     local threshold = get_battery_alert_threshold(widget)
     local should_alert = has_battery_percent and is_armed and threshold > 0 and battery_percent <= threshold
     local alert_interval = get_battery_alert_interval(widget)
 
     if should_alert then
-        local now = getRtcTime() or 0
+        now = now or getRtcTime() or 0
         if not low_battery_alert_active or (now - low_battery_alert_time) >= alert_interval then
             play_widget_audio("lowfuel.wav")
             play_triple_haptic()
@@ -753,6 +804,7 @@ local function rqly_signal_bars_ladder(xs, ys, rqly_percent, default_color, size
     local base_height = m_floor(4 * size)
     local height_increment = m_floor(4 * size)
     rqly_percent = m_max(0, m_min(100, rqly_percent))
+    local C = ensure_colors()
     local active_bars = m_floor((rqly_percent + 8) / 16.67)
     for i = 1, bar_count do
         local bar_x = xs + (i - 1) * (bar_width + bar_spacing)
@@ -767,9 +819,9 @@ local function rqly_signal_bars_ladder(xs, ys, rqly_percent, default_color, size
             elseif i == 3 then
                 bar_color = YELLOW
             elseif i == 4 then
-                bar_color = lcd.RGB(173, 255, 47)
+                bar_color = C.bar4
             elseif i == 5 then
-                bar_color = lcd.RGB(0, 255, 0)
+                bar_color = C.bar5
             else
                 bar_color = GREEN
             end
@@ -1096,8 +1148,7 @@ local function draw_power_gauge(center_x, center_y, radius, power_value, max_pow
     d_line(center_x + 1, center_y, needle_x + 1, needle_y, SOLID, needle_color)
     d_line(center_x, center_y + 1, needle_x, needle_y + 1, SOLID, needle_color)
     d_rect(center_x - 2, center_y - 2, 5, 5, needle_color)
-    local power_str = ""
-        power_str = s_format("%.0fA", power_value)
+    local power_str = s_format("%.0fA", power_value)
     d_text(center_x, center_y + 55, power_str,  needle_color + CENTER + VCENTER)
 end
 local function draw_digital_display(x, y, value, num_digits, decimal_places, digit_size, color)
@@ -1176,7 +1227,18 @@ local function refresh(widget, event, touchState)
     end
     widget.last_refresh_tick = refresh_tick
 
-    local date_time = getDateTime()
+    -- A single RTC read drives the per-second caches below and the flight
+    -- timer further down. Telemetry itself is still sampled every frame.
+    local rtc_now = getRtcTime()
+    if rtc_now ~= frame_cache.rtc_second or not frame_cache.date_time then
+        frame_cache.rtc_second = rtc_now
+        local dt = getDateTime()
+        frame_cache.date_time = dt
+        frame_cache.date_stamp = build_date_stamp(dt)
+        frame_cache.model_info = model.getInfo() or {}
+    end
+    local date_time = frame_cache.date_time
+    local C = ensure_colors()
     local screen_width =  LCD_W or widget.zone.w
     local screen_height =  LCD_H or widget.zone.h
     local bg_color, square_color, value_color = get_widget_colors(widget)
@@ -1187,7 +1249,7 @@ local function refresh(widget, event, touchState)
     if bg_pic_obj then
         d_bitmap(bg_pic_obj, 0, 0)
     end
-    local model_info = model.getInfo() or {}
+    local model_info = frame_cache.model_info
     local model_name = model_info.name or ""
     d_text(720, 414, model_name, RIGHT + MIDSIZE + value_color)
     if tg_pic_obj then
@@ -1198,7 +1260,11 @@ local function refresh(widget, event, touchState)
         end
     end
     local tx_voltage = getValue("tx-voltage") or getValue("TxBt") or 0
-    local tx_battery_str = s_format("%.1fV", tx_voltage)
+    if tx_voltage ~= frame_cache.tx_voltage then
+        frame_cache.tx_voltage = tx_voltage
+        frame_cache.tx_text = s_format("%.1fV", tx_voltage)
+    end
+    local tx_battery_str = frame_cache.tx_text
     local tx_color = value_color
     if tx_voltage < 6.5 then
         tx_color = RED
@@ -1207,15 +1273,19 @@ local function refresh(widget, event, touchState)
     end
     d_text(682, 14, "Tx ", BOLD + square_color)
     d_text(714, 14, tx_battery_str, BOLD + tx_color)
-    local rqly_percent = (field_id[10][2] and value_min_max[10][1]) or 0
-    rqly_signal_bars_ladder(316, 60, rqly_percent, lcd.RGB(80, 80, 80), 1.0)
+    local rqly_percent = (field_ok[10] and tele_cur[10]) or 0
+    rqly_signal_bars_ladder(316, 60, rqly_percent, C.gray80, 1.0)
     if rqly_percent > 0 then
-        d_text(452, 50, s_format("%ddB", rqly_percent), RIGHT + VCENTER + value_color)
+        if rqly_percent ~= frame_cache.rqly_value then
+            frame_cache.rqly_value = rqly_percent
+            frame_cache.rqly_text = s_format("%ddB", rqly_percent)
+        end
+        d_text(452, 50, frame_cache.rqly_text, RIGHT + VCENTER + value_color)
     else
         d_text(452, 50, "---", RIGHT + VCENTER + MIDSIZE + RED)
     end
     local has_telemetry = false
-    if field_id[10][2] then
+    if field_ok[10] then
         if rqly_percent > 0 then
             has_telemetry = true
         end
@@ -1225,7 +1295,7 @@ local function refresh(widget, event, touchState)
     end
     local current_model_name = model_name
     local current_model_bitmap = type(model_info.bitmap) == "string" and model_info.bitmap or ""
-    local current_date_stamp = build_date_stamp(date_time)
+    local current_date_stamp = frame_cache.date_stamp
     local should_load_log = false
     local model_changed = current_model_name ~= runtime_cache.model_name
     local model_bitmap_changed = current_model_bitmap ~= runtime_cache.model_bitmap
@@ -1318,35 +1388,36 @@ local function refresh(widget, event, touchState)
         end
     end
     for k = 1, TELE_ITEMS do
-        if field_id[k][2] then
-            local get_value = getValue(field_id[k][1])
-            value_min_max[k][1] = get_value  
+        if field_ok[k] then
+            local get_value = getValue(field_ids[k])
+            tele_cur[k] = get_value  
             if not hold_active then
-                if get_value > value_min_max[k][2] then
-                    value_min_max[k][2] = get_value
-                elseif get_value < value_min_max[k][3] then
-                    value_min_max[k][3] = get_value
+                if get_value > tele_max[k] then
+                    tele_max[k] = get_value
+                elseif get_value < tele_min[k] then
+                    tele_min[k] = get_value
                 end
             end
         end
     end
-    bank_info.current = (field_id[17][2] and value_min_max[17][1]) or 1
+    bank_info.current = (field_ok[17] and tele_cur[17]) or 1
     local bank_color = square_color
     if bank_info.current == 1 then
-        bank_color = lcd.RGB(0, 100, 255)
+        bank_color = C.bank1
     elseif bank_info.current == 2 then
-        bank_color = lcd.RGB(255, 165, 0)
+        bank_color = C.bank2
     elseif bank_info.current == 3 then
-        bank_color = lcd.RGB(255, 255, 0)
+        bank_color = C.bank3
     end
-    d_text(175, 44, tostring(bank_info.current), CENTER + VCENTER + BOLD + MIDSIZE + bank_color)
-    local arm_status = (field_id[13][2] and value_min_max[13][1]) or 0
+    local bank_label = BANK_LABELS[bank_info.current] or tostring(bank_info.current)
+    d_text(175, 44, bank_label, CENTER + VCENTER + BOLD + MIDSIZE + bank_color)
+    local arm_status = (field_ok[13] and tele_cur[13]) or 0
     local gov_enabled = is_governor_enabled(widget)
-    local gov_status = (gov_enabled and field_id[14][2] and value_min_max[14][1]) or nil
-    local throttle_value = (field_id[11][2] and value_min_max[11][1]) or nil
+    local gov_status = (gov_enabled and field_ok[14] and tele_cur[14]) or nil
+    local throttle_value = (field_ok[11] and tele_cur[11]) or nil
     local disable_flags = nil
-    if field_id[18][2] then
-        disable_flags = value_min_max[18][1]
+    if field_ok[18] then
+        disable_flags = tele_cur[18]
     end
     if disable_flags == nil then
         disable_flags = getValue("ARMD")
@@ -1355,7 +1426,7 @@ local function refresh(widget, event, touchState)
         disable_flags = getValue("Arming Disable")
     end
     local is_armed = false
-    if field_id[13][2] then
+    if field_ok[13] then
         is_armed = (arm_status == 1 or arm_status == 3)
         if arm_status == 2 and last_arm_status ~= 2 and second[1] > 30 then
             session_flight_count = session_flight_count + 1
@@ -1373,26 +1444,26 @@ local function refresh(widget, event, touchState)
     elseif is_armed then
         arm_status_text = "ARMED"
         arm_status_color = YELLOW
-    elseif not field_id[13][2] then
+    elseif not field_ok[13] then
         arm_status_text = "NO TELE"
         arm_status_color = RED + BLINK
     end
     update_led_strip(widget, is_armed, disable_flags_text ~= "OK")
     draw_status_block(480, 40, arm_status_text, arm_status_color)
-    local gov_text = gov_enabled and get_governor_state_text(gov_status, field_id[14][2], throttle_value) or "DISABLED"
-    update_profile_audio(bank_info.current, field_id[17][2])
-    update_arm_audio(is_armed, field_id[13][2])
-    update_governor_audio(gov_enabled and gov_text or nil, gov_enabled and (field_id[14][2] or field_id[11][2]))
-    if field_id[13][2] then
+    local gov_text = gov_enabled and get_governor_state_text(gov_status, field_ok[14], throttle_value) or "DISABLED"
+    update_profile_audio(bank_info.current, field_ok[17])
+    update_arm_audio(is_armed, field_ok[13])
+    update_governor_audio(gov_enabled and gov_text or nil, gov_enabled and (field_ok[14] or field_ok[11]))
+    if field_ok[13] then
         last_arm_status = arm_status
     end
     if is_armed then
         if arm_flag == false then
             arm_flag = true
             for s = 1, TELE_ITEMS do
-                if field_id[s][2] then
-                    value_min_max[s][2] = value_min_max[s][1]
-                    value_min_max[s][3] = value_min_max[s][1]
+                if field_ok[s] then
+                    tele_max[s] = tele_cur[s]
+                    tele_min[s] = tele_cur[s]
                 end
             end
             second[1] = 0
@@ -1406,11 +1477,11 @@ local function refresh(widget, event, touchState)
             write_en_flag = true
         end
     end
-    power_max[2] = m_min(m_floor(value_min_max[1][1] * value_min_max[2][1]), 99999)
+    power_max[2] = m_min(m_floor(tele_cur[1] * tele_cur[2]), 99999)
     if power_max[1] < power_max[2] then
         power_max[1] = power_max[2]
     end
-    second[3] = getRtcTime()
+    second[3] = rtc_now
     if second[2] ~= second[3] then
         second[2] = second[3]
         if arm_flag then
@@ -1438,26 +1509,26 @@ local function refresh(widget, event, touchState)
             s_format("%02d", date_time.min) .. ':' ..
             s_format("%02d", date_time.sec) .. '|' ..
             minutes[1] .. ':' .. seconds[1] .. '|' ..
-            s_format("%04d", m_max(0, value_min_max[4][1] - value_min_max[4][3])) .. '|' ..
-            s_format("%03d", m_max(0, value_min_max[5][2] - value_min_max[5][1])) .. '|' ..
-            s_format("%04d", value_min_max[3][2]) .. '|' ..
-            s_format("%05.1f", value_min_max[2][2]) .. '|' ..
+            s_format("%04d", m_max(0, tele_cur[4] - tele_min[4])) .. '|' ..
+            s_format("%03d", m_max(0, tele_max[5] - tele_cur[5])) .. '|' ..
+            s_format("%04d", tele_max[3]) .. '|' ..
+            s_format("%05.1f", tele_max[2]) .. '|' ..
             s_format("%05d", power_max[1]) .. '|' ..
-            s_format("%04.1f", value_min_max[1][2]) .. '|' ..
-            s_format("%04.1f", value_min_max[1][3]) .. '|' ..
-            s_format("%+04d", value_min_max[6][2]) .. '|' ..
-            s_format("%+04d", value_min_max[6][3]) .. '|' ..
-            s_format("%+04d", value_min_max[7][2]) .. '|' ..
-            s_format("%+04d", value_min_max[7][3]) .. "|" ..
-            s_format("%+04d", value_min_max[8][2]) .. '|' ..
-            s_format("%+04d", value_min_max[8][3]) .. '|' ..
-            s_format("%+04d", value_min_max[9][2]) .. '|' ..
-            s_format("%+04d", value_min_max[9][3]) .. '|' ..
-            s_format("%03d", value_min_max[10][2]) .. '|' ..
-            s_format("%03d", value_min_max[10][3]) .. '|' ..
-            s_format("%03d", value_min_max[11][2]) .. '|' ..
-            s_format("%04.1f", value_min_max[12][2]) .. '|' ..
-            s_format("%04.1f", value_min_max[12][3]) .. "\n"
+            s_format("%04.1f", tele_max[1]) .. '|' ..
+            s_format("%04.1f", tele_min[1]) .. '|' ..
+            s_format("%+04d", tele_max[6]) .. '|' ..
+            s_format("%+04d", tele_min[6]) .. '|' ..
+            s_format("%+04d", tele_max[7]) .. '|' ..
+            s_format("%+04d", tele_min[7]) .. "|" ..
+            s_format("%+04d", tele_max[8]) .. '|' ..
+            s_format("%+04d", tele_min[8]) .. '|' ..
+            s_format("%+04d", tele_max[9]) .. '|' ..
+            s_format("%+04d", tele_min[9]) .. '|' ..
+            s_format("%03d", tele_max[10]) .. '|' ..
+            s_format("%03d", tele_min[10]) .. '|' ..
+            s_format("%03d", tele_max[11]) .. '|' ..
+            s_format("%04.1f", tele_max[12]) .. '|' ..
+            s_format("%04.1f", tele_min[12]) .. "\n"
         -- Keep only the references needed by the deferred main-log write.
         write_snapshot = {
             file_path  = file_path,
@@ -1498,14 +1569,14 @@ local function refresh(widget, event, touchState)
     d_text(645, 385, gov_text, LEFT + BOLD + value_color)
 
     -- Left column: battery, temperature and current gauges
-    local tmcu_value = (field_id[6][2] and value_min_max[6][1]) or 0
-    local bat_percent = (field_id[5][2] and value_min_max[5][1]) or 0
-    local battery_capacity = (field_id[4][2] and value_min_max[4][1]) or 0
-    local current_value = (field_id[2][2] and value_min_max[2][1]) or 0
-    local current_arm_status = (field_id[13][2] and value_min_max[13][1]) or 0
+    local tmcu_value = (field_ok[6] and tele_cur[6]) or 0
+    local bat_percent = (field_ok[5] and tele_cur[5]) or 0
+    local battery_capacity = (field_ok[4] and tele_cur[4]) or 0
+    local current_value = (field_ok[2] and tele_cur[2]) or 0
+    local current_arm_status = (field_ok[13] and tele_cur[13]) or 0
     local current_is_armed = (current_arm_status == 1 or current_arm_status == 3)
 
-    update_low_battery_alert(widget, bat_percent, current_is_armed, field_id[5][2] and telemetry_initialized)
+    update_low_battery_alert(widget, bat_percent, current_is_armed, field_ok[5] and telemetry_initialized, rtc_now)
 
     draw_gauge_meter(125, 450, tmcu_value, 100, 100, value_color, square_color)
     d_text(80, 400, "°C", square_color)
@@ -1523,10 +1594,10 @@ local function refresh(widget, event, touchState)
     draw_ring_progress(217, 395, current_flight_max_current, 300, 80)
 
     -- Center column: RPM and voltages
-    local rpm_value = (field_id[3][2] and value_min_max[3][1]) or 0
-    local battery_voltage = (field_id[1][2] and value_min_max[1][1]) or 0
-    local vcel_voltage = (field_id[15][2] and value_min_max[15][1]) or 0
-    local bec_voltage = (field_id[12][2] and value_min_max[12][1]) or 0
+    local rpm_value = (field_ok[3] and tele_cur[3]) or 0
+    local battery_voltage = (field_ok[1] and tele_cur[1]) or 0
+    local vcel_voltage = (field_ok[15] and tele_cur[15]) or 0
+    local bec_voltage = (field_ok[12] and tele_cur[12]) or 0
 
     draw_digital_display(320, 115, rpm_value, 4, 0, 35, value_color)
     d_text(500, 156, "rpm", CENTER + VCENTER + square_color)
