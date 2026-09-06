@@ -788,8 +788,10 @@ function draw_gauge_meter(xs, ys, value, max_value, size, color, bg_color)
                 xs + math.cos(rad) * (radius * 0.92), ys + math.sin(rad) * (radius * 0.92)
             }
         end
-        -- Fewer, wider angular segments retain the six-pixel arc thickness
-        -- while cutting arc calls from 270 to 144 per refresh.
+        -- One filled annulus per segment replaces the six stacked 1px arcs
+        -- that used to draw the band, cutting 144 arc calls to 24 per refresh.
+        geometry.band_inner = radius * 0.92
+        geometry.band_outer = radius * 0.92 + 6
         for seg = 0, 23 do
             local percent = seg / 24
             geometry.arcs[#geometry.arcs + 1] = {
@@ -810,11 +812,11 @@ function draw_gauge_meter(xs, ys, value, max_value, size, color, bg_color)
         lcd.drawLine(tick[1], tick[2], tick[3], tick[4], SOLID, bg_color)
     end
     local value_percent = value / max_value * 100
+    local band_inner = gauge_geometry_cache.band_inner
+    local band_outer = gauge_geometry_cache.band_outer
     for i = 1, #gauge_geometry_cache.arcs do
         local arc = gauge_geometry_cache.arcs[i]
-        for w = 0, 5 do
-            lcd.drawArc(xs, ys, radius * 0.92 + w, arc[1], arc[2], arc[3])
-        end
+        lcd.drawAnnulus(xs, ys, band_inner, band_outer, arc[1], arc[2], arc[3])
     end
     local value_angle = start_angle + (value_percent / 100) * range_angle
     local pointer_angle = value_angle
@@ -1060,10 +1062,8 @@ function draw_power_gauge(center_x, center_y, radius, power_value, max_power, ga
         end
         power_gauge_geometry_cache = geometry
     end
-    lcd.drawArc(center_x, center_y, radius, start_angle, 360, gauge_color)
-    lcd.drawArc(center_x, center_y, radius - 2, start_angle, 360, gauge_color)
-    lcd.drawArc(center_x, center_y, radius, 0, end_angle, gauge_color)
-    lcd.drawArc(center_x, center_y, radius - 2, 0, end_angle, gauge_color)
+    lcd.drawAnnulus(center_x, center_y, radius - 2, radius + 1, start_angle, 360, gauge_color)
+    lcd.drawAnnulus(center_x, center_y, radius - 2, radius + 1, 0, end_angle, gauge_color)
     for i = 1, #geometry.ticks do
         local tick = geometry.ticks[i]
         lcd.drawLine(tick[1], tick[2], tick[3], tick[4], SOLID, gauge_color)
