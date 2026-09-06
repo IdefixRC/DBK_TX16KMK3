@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="doc/images/readme-preview.png" alt="DBK TX16 MK3" width="420"/>
+  <img src="doc/images/readme-preview-1.jpg" alt="DBK TX16 MK3 - Armed" width="420"/>
 </div>
 
 # DBK_TX16KMK3
@@ -68,6 +68,10 @@ SD card.
 - Rotorflight with CRSF telemetry working
 - An SD card set up for Lua widgets
 
+<div align="center">
+  <img src="doc/images/readme-preview.jpg" alt="DBK TX16 MK3 - Disarmed" width="420"/>
+</div>
+
 ## Installation
 
 [Download the latest release .zip file](https://github.com/IdefixRC/DBK_TX16KMK3/releases/latest)
@@ -128,7 +132,7 @@ The widget has the following options:
 - `LED Armed`: LED colour while the model is armed
 - `LED Disarmed`: LED colour while the model is disarmed, and the base colour of the `disable flags` animation
 - `Show Governor`: enables or disables reading and showing the governor
-- `Log Switch`: *(optional)* allows you to hold the log recording at any point during the
+- `Log Switch`: _(optional)_ allows you to hold the log recording at any point during the
   flight. When the `Log Switch` is engaged, the small padlock on the screen will engage.
 
 `LED Armed` and `LED Disarmed` offer red, green, blue, yellow, cyan, magenta, white, orange,
