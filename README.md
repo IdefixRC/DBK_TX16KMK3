@@ -119,16 +119,17 @@ widget falls back to its own default picture.
 
 The widget has the following options:
 
-- `Text Color`: colour of labels and secondary elements
+- `Pilot Name`: name shown in the footer, default `Rotorflight`
+- `Low Batt %`: battery percentage that triggers the low battery alert, default `25`
+- `Alert Every s`: seconds between repeated low battery alerts, default `10`
+- `Label Color`: colour of labels and secondary elements
 - `Value Color`: colour of the main values
 - `Enable LEDs`: enables or disables the radio LEDs
 - `LED Armed`: LED colour while the model is armed
 - `LED Disarmed`: LED colour while the model is disarmed, and the base colour of the `disable flags` animation
 - `Show Governor`: enables or disables reading and showing the governor
-- `Arm Switch`: switch that pauses the minimums and maximums recorded in the flight log, see below
-- `Low Batt %`: battery percentage that triggers the low battery alert, default `25`
-- `Alert Every s`: seconds between repeated low battery alerts, default `10`
-- `Pilot Name`: name shown in the footer, default `Rotorflight`
+- `Log Switch`: *(optional)* allows you to hold the log recording at any point during the
+  flight. When the `Log Switch` is engaged, the small padlock on the screen will engage.
 
 `LED Armed` and `LED Disarmed` offer red, green, blue, yellow, cyan, magenta, white, orange,
 purple and pink. The defaults are blue for armed and red for disarmed.
@@ -136,20 +137,41 @@ purple and pink. The defaults are blue for armed and red for disarmed.
 Every setting lives in the widget options and is stored by EdgeTX itself. There is no
 configuration file to create or edit.
 
+**Upgrading:** EdgeTX stores widget option values by their position in this list, not by
+their name. This release reorders the list, so settings saved by an earlier version no
+longer line up.
+
+The widget detects this. `Pilot Name` is the first option and the only text one, so if it
+reads back as anything other than text the stored values must belong to the old order.
+When that happens the widget ignores all of them and runs on the defaults listed above,
+so it looks and behaves exactly as a freshly installed one.
+
+The settings screen is EdgeTX's own and still shows the stale values until you save them:
+a widget cannot rewrite its own options. Open the widget settings once per model and save
+your values, and both the screen and the widget agree from then on. Deleting the widget
+and adding it again also works, and starts the settings screen from the defaults.
+
 `Pilot Name` is an EdgeTX text option, so it is limited to 12 characters. Leave it empty
 to fall back to `Rotorflight`.
 
-### Arm Switch
+### Log Switch
 
-The widget reads the armed state from the `ARM` telemetry sensor, not from this option.
-`Arm Switch` does one thing: while the assigned switch is active, the widget stops
-updating the per-flight minimums and maximums that go into the flight log, and the
-padlock at the top left turns red.
+While the assigned switch is engaged, the widget stops updating the per-flight minimums
+and maximums that go into the flight log, and the padlock at the top left turns red.
+Release the switch and recording resumes, so a later peak higher than the held one is
+still picked up.
 
-Nothing on the display freezes. The live values keep updating, and the peak current ring
-around the current gauge keeps climbing. Only the minimum and maximum columns written to
-the log file when you disarm are affected. Leave the option unassigned to record the
-whole flight.
+The main use is keeping readings that are not real out of the flight record. A few
+seconds of lost telemetry is enough to write a zero into the minimum pack voltage,
+both temperatures, both RSSI figures and the link quality for the whole flight. Holding
+the switch through a dropout, or through spool-up and spool-down, keeps those out.
+
+Nothing on the display freezes and nothing is written when you engage the switch. The
+log entry is still written when you disarm, and only for flights longer than 30 seconds.
+Flight time, capacity used, battery percentage used and maximum power keep updating while
+the switch is held; the other seventeen logged columns are the ones it holds.
+
+Leave the option unassigned to record the whole flight.
 
 ## Changes in this fork
 

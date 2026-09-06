@@ -11,7 +11,7 @@ local getValue, getTime, getRtcTime = getValue, getTime, getRtcTime
 local d_text, d_line, d_rect = lcd.drawText, lcd.drawLine, lcd.drawFilledRectangle
 local d_arc, d_annulus, d_bitmap, d_circle =
     lcd.drawArc, lcd.drawAnnulus, lcd.drawBitmap, lcd.drawFilledCircle
-local VERSION = "v1.0.7"
+local VERSION = "v1.0.8"
 local WIDGET_DIR = "DBK_TX16KMK3"
 local WIDGET_ROOT = "/WIDGETS/" .. WIDGET_DIR
 local IMAGE_ROOT = WIDGET_ROOT .. "/image"
@@ -187,20 +187,61 @@ local ARM_DISABLE_FLAG_NAMES = {
     [25] = "ARM SWITCH"
 }
 
--- EdgeTX stores widget option values by position, not by name, so these labels
--- can be reworded freely as long as the order and the types below stay put.
+-- Ordered so the settings a pilot changes between flights come first and the
+-- switch assignment sits last. EdgeTX stores option VALUES by position, so this
+-- order is what a stored model file is matched against: changing it means saved
+-- settings no longer line up and have to be re-entered. Every read below is
+-- type-guarded so a stale model file falls back to the default rather than
+-- feeding a colour into a switch.
 local options = {
-    { "Text Color", COLOR, WHITE },
+    { "Pilot Name", STRING, DEFAULT_PILOT_NAME },
+    { "Low Batt %", VALUE, DEFAULT_BATTERY_ALERT_PCT, 0, 100 },
+    { "Alert Every s", VALUE, DEFAULT_BATTERY_ALERT_INTERVAL, 1, 120 },
+    { "Label Color", COLOR, WHITE },
     { "Value Color", COLOR, GREEN },
     { "Enable LEDs", BOOL, 0 },
     { "LED Armed", CHOICE, 3, LED_COLOR_NAMES },
     { "LED Disarmed", CHOICE, 1, LED_COLOR_NAMES },
     { "Show Governor", BOOL, 1 },
-    { "Arm Switch", SWITCH, 0 },
-    { "Low Batt %", VALUE, DEFAULT_BATTERY_ALERT_PCT, 0, 100 },
-    { "Alert Every s", VALUE, DEFAULT_BATTERY_ALERT_INTERVAL, 1, 120 },
-    { "Pilot Name", STRING, DEFAULT_PILOT_NAME }
+    { "Log Switch", SWITCH, 0 }
 }
+
+-- Mirrors the defaults declared above, keyed by the same names.
+local OPTION_DEFAULTS = {
+    ["Pilot Name"]    = DEFAULT_PILOT_NAME,
+    ["Low Batt %"]    = DEFAULT_BATTERY_ALERT_PCT,
+    ["Alert Every s"] = DEFAULT_BATTERY_ALERT_INTERVAL,
+    ["Label Color"]   = WHITE,
+    ["Value Color"]   = GREEN,
+    ["Enable LEDs"]   = 0,
+    ["LED Armed"]     = 3,
+    ["LED Disarmed"]  = 1,
+    ["Show Governor"] = 1,
+    ["Log Switch"]    = 0
+}
+
+-- A widget carried over from a build with a different option order reports the old
+-- slot values against the new names: slot 1 used to hold a colour, so "Pilot Name"
+-- comes back as a number rather than a string. A Lua widget cannot write its own
+-- options, so the stored data cannot be repaired from here, but that mismatch is a
+-- reliable signal that none of the values belong to the option they now sit in.
+-- Ignore all of them and run on the declared defaults until the settings are saved
+-- once on the radio.
+local function options_are_stale(widget)
+    return type(widget and widget.options and widget.options["Pilot Name"]) ~= "string"
+end
+
+local function widget_option(widget, name)
+    local default = OPTION_DEFAULTS[name]
+    if not widget or not widget.options or options_are_stale(widget) then
+        return default
+    end
+    local value = widget.options[name]
+    if value == nil or type(value) ~= type(default) then
+        return default
+    end
+    return value
+end
 local function build_default_log_info()
     return s_format("%d", getDateTime().year) .. '/' ..
         s_format("%02d", getDateTime().mon) .. '/' ..
@@ -342,14 +383,14 @@ local function update_led_strip(widget, is_armed, has_disable_flags)
         return
     end
 
-    local armed_color_index = m_floor(tonumber(widget.options["LED Armed"]) or 3)
-    local disarmed_color_index = m_floor(tonumber(widget.options["LED Disarmed"]) or 1)
+    local armed_color_index = m_floor(tonumber(widget_option(widget, "LED Armed")) or 3)
+    local disarmed_color_index = m_floor(tonumber(widget_option(widget, "LED Disarmed")) or 1)
     if not LED_COLORS[armed_color_index] then armed_color_index = 3 end
     if not LED_COLORS[disarmed_color_index] then disarmed_color_index = 1 end
     local armed_color = LED_COLORS[armed_color_index]
     local disarmed_color = LED_COLORS[disarmed_color_index]
 
-    if widget.options["Enable LEDs"] ~= 1 then
+    if widget_option(widget, "Enable LEDs") ~= 1 then
         if led_cache.mode ~= "OFF" then
             led_cache.mode = "OFF"
             led_cache.phase = -1
@@ -547,14 +588,28 @@ end
 local function background(widget)
 end
 
+-- EdgeTX hands the script whatever the model file holds. A widget upgraded from a
+-- build with a different option order, or one whose stored data was never filled in,
+-- reports its options blank. Resolve every read against the declared default instead
+-- of drawing with the raw value: a colour of 0 is black, which renders every label
+-- and value invisible against the background and looks like the widget lost its data.
+local function opt_color(widget, name)
+    local v = widget_option(widget, name)
+    -- 0 is black. Never a usable choice for text here, and indistinguishable from unset.
+    if type(v) ~= "number" or v == 0 then
+        return OPTION_DEFAULTS[name]
+    end
+    return v
+end
+
 local function get_widget_colors(widget)
     local cache = widget.color_cache
     if not cache then
         cache = {}
         widget.color_cache = cache
     end
-    local square_option = widget.options["Text Color"]
-    local value_option = widget.options["Value Color"]
+    local square_option = opt_color(widget, "Label Color")
+    local value_option = opt_color(widget, "Value Color")
     if cache.square_option ~= square_option or cache.value_option ~= value_option then
         lcd.setColor(CUSTOM_COLOR, square_option)
         cache.square_color = lcd.getColor(CUSTOM_COLOR)
@@ -572,7 +627,7 @@ end
 
 local pilot_name_cache = { option = nil, value = DEFAULT_PILOT_NAME }
 local function get_pilot_name(widget)
-    local pilot_name = widget and widget.options and widget.options["Pilot Name"]
+    local pilot_name = widget_option(widget, "Pilot Name")
     if type(pilot_name) ~= "string" then
         return DEFAULT_PILOT_NAME
     end
@@ -589,7 +644,7 @@ local function get_pilot_name(widget)
 end
 
 local function get_battery_alert_interval(widget)
-    local interval = tonumber(widget and widget.options and widget.options["Alert Every s"])
+    local interval = tonumber(widget_option(widget, "Alert Every s"))
     if not interval or interval < 1 then
         return DEFAULT_BATTERY_ALERT_INTERVAL
     end
@@ -597,7 +652,11 @@ local function get_battery_alert_interval(widget)
 end
 
 local function get_battery_alert_threshold(widget)
-    local threshold = tonumber(widget.options["Low Batt %"]) or 0
+    local raw_threshold = widget_option(widget, "Low Batt %")
+    local threshold = tonumber(raw_threshold)
+    if threshold == nil then
+        threshold = DEFAULT_BATTERY_ALERT_PCT
+    end
     if threshold < 0 then
         return 0
     end
@@ -702,7 +761,7 @@ local function update_governor_audio(gov_text, has_governor_state)
 end
 
 local function is_governor_enabled(widget)
-    return not widget or widget.options["Show Governor"] ~= 0
+    return widget_option(widget, "Show Governor") ~= 0
 end
 
 local function update_low_battery_alert(widget, battery_percent, is_armed, has_battery_percent, now)
@@ -1372,8 +1431,9 @@ local function refresh(widget, event, touchState)
         session_flight_count = 0
     end
     local hold_active = false
-    if widget.options["Arm Switch"] ~= 0 then
-        local switch_value = getSwitchValue(widget.options["Arm Switch"])
+    local log_switch = widget_option(widget, "Log Switch")
+    if type(log_switch) == "number" and log_switch ~= 0 then
+        local switch_value = getSwitchValue(log_switch)
         if switch_value and switch_value ~= 0 and switch_value ~= false then
             hold_active = true
         else
