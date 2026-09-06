@@ -16,6 +16,12 @@ local WIDGET_DIR = "DBK_TX16KMK3"
 local WIDGET_ROOT = "/WIDGETS/" .. WIDGET_DIR
 local IMAGE_ROOT = WIDGET_ROOT .. "/image"
 local MODEL_IMAGE_ROOT = "/IMAGES"
+-- Panel reserved for the model picture. Matches the bundled default.png, and stays
+-- clear of the governor row at y=385 and the model name at y=414.
+local MODEL_IMAGE_X = 530
+local MODEL_IMAGE_Y = 190
+local MODEL_IMAGE_W = 250
+local MODEL_IMAGE_H = 150
 local MODEL_IMAGE_EXTS = { ".png", ".bmp", ".jpg" }
 local AUDIO_ROOT = WIDGET_ROOT .. "/audio"
 local LOG_ROOT = WIDGET_ROOT .. "/logs"
@@ -74,6 +80,8 @@ local DIGIT_SEGMENTS = {
 local tg_pic_obj
 local bg_pic_obj
 local default_pic_obj
+local tg_pic_x, tg_pic_y = MODEL_IMAGE_X, MODEL_IMAGE_Y
+local default_pic_x, default_pic_y = MODEL_IMAGE_X, MODEL_IMAGE_Y
 local hold1_pic_obj
 local hold2_pic_obj
 local runtime_cache = {
@@ -287,6 +295,47 @@ local function resolve_model_image_path(model_info)
     end
 
     return nil
+end
+
+-- A model picture is whatever file the pilot assigned in Model Setup, at whatever
+-- size that file happens to be, and lcd.drawBitmap has no fitting of its own: an
+-- oversized image was drawn 1:1 from the top-left of the panel and ran over the
+-- governor row and the model name. Scale it into the panel preserving aspect ratio
+-- and centre the result. This runs when the model changes, never per frame.
+--
+-- Bitmap.getSize and Bitmap.resize are checked rather than assumed; if either is
+-- missing the image is drawn unscaled, which is the old behaviour.
+local function fit_model_image(bitmap)
+    if not bitmap then
+        return nil, MODEL_IMAGE_X, MODEL_IMAGE_Y
+    end
+    if type(Bitmap) ~= "table" or type(Bitmap.getSize) ~= "function"
+        or type(Bitmap.resize) ~= "function" then
+        return bitmap, MODEL_IMAGE_X, MODEL_IMAGE_Y
+    end
+
+    local width, height = Bitmap.getSize(bitmap)
+    if type(width) ~= "number" or type(height) ~= "number"
+        or width <= 0 or height <= 0 then
+        return bitmap, MODEL_IMAGE_X, MODEL_IMAGE_Y
+    end
+
+    local scale = m_min(MODEL_IMAGE_W / width, MODEL_IMAGE_H / height)
+    local target_w = m_max(1, m_floor(width * scale + 0.5))
+    local target_h = m_max(1, m_floor(height * scale + 0.5))
+
+    local fitted = bitmap
+    if target_w ~= width or target_h ~= height then
+        fitted = Bitmap.resize(bitmap, target_w, target_h)
+        if not fitted then
+            -- resize failed, centre what we actually have
+            fitted, target_w, target_h = bitmap, width, height
+        end
+    end
+
+    return fitted,
+        MODEL_IMAGE_X + m_floor((MODEL_IMAGE_W - target_w) / 2),
+        MODEL_IMAGE_Y + m_floor((MODEL_IMAGE_H - target_h) / 2)
 end
 
 local function build_date_stamp(date_time)
@@ -571,7 +620,8 @@ local function create(zone, options)
         fly_number = 1
         log_data[1] = "01|12:34:56|05:30|1850|025|2400|125.5|03500|25.2|22.8|+055|+025|+040|+020|-032|-072|-028|-065|100|095|080|12.6|11.8\n"
     end
-    default_pic_obj = Bitmap.open(IMAGE_ROOT .. "/default.png")
+    default_pic_obj, default_pic_x, default_pic_y =
+        fit_model_image(Bitmap.open(IMAGE_ROOT .. "/default.png"))
     hold1_pic_obj = Bitmap.open(IMAGE_ROOT .. "/hold1.png")
     hold2_pic_obj = Bitmap.open(IMAGE_ROOT .. "/hold2.png")
     local current_model = model.getInfo().name
@@ -1314,11 +1364,9 @@ local function refresh(widget, event, touchState)
     local model_name = model_info.name or ""
     d_text(720, 414, model_name, RIGHT + MIDSIZE + value_color)
     if tg_pic_obj then
-           d_bitmap(tg_pic_obj, 530, 190)        
-    else
-        if default_pic_obj then
-            d_bitmap(default_pic_obj, 530, 190)
-        end
+        d_bitmap(tg_pic_obj, tg_pic_x, tg_pic_y)
+    elseif default_pic_obj then
+        d_bitmap(default_pic_obj, default_pic_x, default_pic_y)
     end
     local tx_voltage = getValue("tx-voltage") or getValue("TxBt") or 0
     if tx_voltage ~= frame_cache.tx_voltage then
@@ -1377,7 +1425,8 @@ local function refresh(widget, event, touchState)
         runtime_cache.model_bitmap = current_model_bitmap
         runtime_cache.pic_path = resolve_model_image_path(model_info) or ""
         if runtime_cache.pic_path ~= "" then
-            tg_pic_obj = Bitmap.open(runtime_cache.pic_path)
+            tg_pic_obj, tg_pic_x, tg_pic_y =
+                fit_model_image(Bitmap.open(runtime_cache.pic_path))
         else
             tg_pic_obj = nil
         end

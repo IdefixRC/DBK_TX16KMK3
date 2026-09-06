@@ -145,6 +145,17 @@ stored.
 `Pilot Name` is an EdgeTX text option, so it is limited to 12 characters. Leave it empty
 to fall back to `Rotorflight`.
 
+### Model image
+
+The picture comes from the image assigned to the model in EdgeTX **Model Setup**, loaded
+from `/IMAGES`. Whatever size that file is, the widget scales it to fit the 250x150 panel
+on the right of the screen, keeps its aspect ratio and centres it. A large photo is
+scaled down rather than drawn over the governor row and the model name, and a small one
+is scaled up to fill the panel.
+
+If the model has no image assigned, or the file is missing, the bundled `default.png` is
+shown instead.
+
 ### Log Switch
 
 While the assigned switch is engaged, the widget stops updating the per-flight minimums
