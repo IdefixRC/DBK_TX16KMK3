@@ -1,5 +1,5 @@
 set crsf_telemetry_mode = CUSTOM
-set telemetry_sensors = 3,43,4,5,6,8,60,15,50,52,93,90,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+set telemetry_sensors = 3,4,5,6,7,8,43,50,60,88,90,91,99,95,96,15,52,93,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
 set crsf_telemetry_link_rate = 500
 set crsf_telemetry_link_ratio = 8 
 save 

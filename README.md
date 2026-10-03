@@ -223,7 +223,7 @@ The widget is built to work with Rotorflight/CRSF sensors such as:
 The simplest way to enable all the sensors it needs is to run this command in the CLI:
 
 ```text
-set telemetry_sensors = 3,4,5,6,7,8,43,50,60,88,90,91,99,95,96,15,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+set telemetry_sensors = 3,4,5,6,7,8,43,50,60,88,90,91,99,95,96,15,52,93,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
 ```
 
 ## Alerts and behaviour
