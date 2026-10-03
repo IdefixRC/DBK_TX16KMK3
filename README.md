@@ -4,6 +4,10 @@
 
 # DBK_TX16KMK3
 
+[![Version](https://img.shields.io/github/v/release/IdefixRC/DBK_TX16KMK3?label=version&color=4361ee)](https://github.com/IdefixRC/DBK_TX16KMK3/releases)
+[![Platform](https://img.shields.io/badge/platform-EdgeTX-2ec27e)](https://edgetx.org/)
+[![Lua](https://img.shields.io/badge/language-Lua-00979d?logo=lua)](https://www.lua.org/)
+
 > **This is a fork of a fork.** Two people did the work this repository builds on:
 >
 > - **Bei Ke** ([liuhm2019-crypto/DBK_TX16KMK3](https://github.com/liuhm2019-crypto/DBK_TX16KMK3))
