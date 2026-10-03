@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Troubleshooting
+    url: https://github.com/IdefixRC/DBK_TX16KMK3#troubleshooting
+    about: The most common problems and their fixes, in the README.
+  - name: Rotorflight setup questions
+    url: https://www.rotorflight.org/
+    about: Flight controller, governor and telemetry configuration questions are best answered by the Rotorflight docs and community.

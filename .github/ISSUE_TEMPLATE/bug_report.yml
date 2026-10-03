@@ -1,0 +1,151 @@
+name: Bug report
+description: Something in the DBK_TX16KMK3 widget doesn't work as it should.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report this. Before you start, check [Troubleshooting](https://github.com/IdefixRC/DBK_TX16KMK3#troubleshooting) in the README.
+
+        **Upgraded recently?** EdgeTX cannot carry widget settings across a change in option order. Open the widget settings once per model, check every value and save. That fixes most problems after an update.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: A clear description of the problem. If the radio showed a Lua error, copy its exact text here.
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: How do we make it happen on our radio?
+      placeholder: |
+        1. Power the radio, then the heli
+        2. Arm and fly for more than 30 seconds
+        3. Disarm
+        4. ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect to happen?
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Which part of the widget?
+      options:
+        - Telemetry values or gauges
+        - ARMED / disarmed status or disable flags
+        - Governor
+        - Flight timer
+        - Flight count
+        - Flight log file
+        - Log Switch
+        - Low battery alert
+        - Audio announcements
+        - RGB LEDs
+        - Model image
+        - Widget settings
+        - Installation
+        - Other
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Widget version
+      description: The version from the release ZIP name, e.g. `DBK_TX16KMK3-v1.0.8.zip` is `v1.0.8`. If you cloned the repo, give the commit (`git log -1 --oneline`).
+      placeholder: "v1.0.8"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: install
+    attributes:
+      label: Installed from
+      options:
+        - Release ZIP
+        - git clone
+    validations:
+      required: true
+
+  - type: dropdown
+    id: upgrade
+    attributes:
+      label: Fresh install or upgrade?
+      options:
+        - Fresh install
+        - Upgrade, widget settings opened and saved afterwards
+        - Upgrade, widget settings not saved since
+    validations:
+      required: true
+
+  - type: dropdown
+    id: radio
+    attributes:
+      label: Radio
+      description: The widget is written for the RadioMaster TX16 MK3 only. Other radios aren't supported, but reports are still welcome.
+      options:
+        - RadioMaster TX16 MK3
+        - Other (please say which in the additional context)
+    validations:
+      required: true
+
+  - type: input
+    id: edgetx-version
+    attributes:
+      label: EdgeTX version
+      description: On the radio, under SYS → Version.
+      placeholder: "2.11.2"
+    validations:
+      required: true
+
+  - type: input
+    id: rotorflight-version
+    attributes:
+      label: Rotorflight version
+      description: Shown in the Rotorflight Configurator once connected.
+      placeholder: "4.5.0"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: sensors
+    attributes:
+      label: Telemetry sensors
+      description: How the CRSF telemetry sensors were set up on the flight controller.
+      options:
+        - With the CLI command from the README
+        - My own sensor list
+        - Not sure
+    validations:
+      required: true
+
+  - type: textarea
+    id: flight-log
+    attributes:
+      label: Flight log
+      description: |
+        For problems with logged values, counts or times, paste the day's log file from the SD card: `/WIDGETS/DBK_TX16KMK3/logs/[<model name>]<YYYYMMDD>.log`.
+      render: text
+
+  - type: textarea
+    id: media
+    attributes:
+      label: Photos or screenshots
+      description: A photo of the radio screen often says more than a description. Drag images into this box.
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Anything else that might help, e.g. the receiver and link rate, the widget settings you use, or when it started.
